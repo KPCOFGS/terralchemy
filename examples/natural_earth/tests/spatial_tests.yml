@@ -1,0 +1,35 @@
+tests:
+  # Large countries tests
+  - name: large_countries_has_rows
+    model: large_countries
+    test: row_count_positive
+
+  - name: large_countries_valid_geom
+    model: large_countries
+    test: geometry_is_valid
+
+  - name: large_countries_not_empty
+    model: large_countries
+    test: geometry_not_empty
+
+  - name: large_countries_within_bounds
+    model: large_countries
+    test: bounds_check
+
+  # Major cities tests
+  - name: major_cities_has_rows
+    model: major_cities
+    test: row_count_positive
+
+  - name: major_cities_not_null
+    model: major_cities
+    test: geometry_not_null
+
+  # Country city density tests
+  - name: density_has_rows
+    model: country_city_density
+    test: row_count_positive
+
+  - name: density_valid_geom
+    model: country_city_density
+    test: geometry_is_valid

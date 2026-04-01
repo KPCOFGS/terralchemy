@@ -1,0 +1,20 @@
+# Natural Earth datasets — free vector and raster map data
+# Download from: https://www.naturalearthdata.com/downloads/
+#
+# For this demo, download:
+#   - ne_110m_admin_0_countries.shp  (countries)
+#   - ne_110m_populated_places.shp   (cities)
+# Place them in the data/ directory.
+
+sources:
+  - name: countries
+    path: data/ne_110m_admin_0_countries.shp
+    format: shapefile
+    crs: EPSG:4326
+    description: Natural Earth 110m country boundaries
+
+  - name: cities
+    path: data/ne_110m_populated_places.shp
+    format: shapefile
+    crs: EPSG:4326
+    description: Natural Earth 110m populated places

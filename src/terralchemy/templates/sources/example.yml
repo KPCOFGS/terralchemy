@@ -1,0 +1,19 @@
+# Define your geospatial data sources here.
+# Supported formats: Shapefile (.shp), GeoJSON (.geojson), GeoPackage (.gpkg),
+#                    GeoParquet (.parquet), FlatGeobuf (.fgb), KML (.kml), CSV (.csv)
+#
+# Example:
+#
+# sources:
+#   - name: my_boundaries
+#     path: data/boundaries.geojson
+#     format: geojson
+#     crs: EPSG:4326
+#     description: Administrative boundaries
+
+sources:
+  - name: example_points
+    path: data/example.geojson
+    format: geojson
+    crs: EPSG:4326
+    description: Example point dataset

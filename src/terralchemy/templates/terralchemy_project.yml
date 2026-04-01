@@ -1,0 +1,11 @@
+name: {{project_name}}
+version: "0.1.0"
+
+profile:
+  engine: duckdb
+  database: ./target/terralchemy.duckdb
+
+sources_path: sources
+models_path: models
+tests_path: tests
+target_path: target

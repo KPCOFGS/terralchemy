@@ -1,0 +1,28 @@
+# Spatial tests for your models.
+# Built-in test types:
+#   - geometry_is_valid     : All geometries pass ST_IsValid
+#   - geometry_not_empty    : No empty geometries
+#   - geometry_not_null     : No NULL geometries
+#   - no_duplicate_geometries : No exact duplicate geometries
+#   - bounds_check          : All geometries within WGS84 bounds (-180..180, -90..90)
+#   - row_count_positive    : Model has at least one row
+#
+# Custom SQL test example:
+#   - name: my_custom_test
+#     model: my_model
+#     test: custom_sql
+#     query: "SELECT COUNT(*) FROM {{ model }} WHERE some_column IS NULL"
+#     expect: zero
+
+tests:
+  - name: example_has_rows
+    model: example
+    test: row_count_positive
+
+  - name: example_valid_geometry
+    model: example
+    test: geometry_is_valid
+
+  - name: example_within_bounds
+    model: example
+    test: bounds_check
