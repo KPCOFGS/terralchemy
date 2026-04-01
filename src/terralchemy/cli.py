@@ -181,6 +181,40 @@ def list_pipeline(
 
 
 @app.command()
+def ui(
+    project_dir: Optional[str] = typer.Option(None, "--project-dir", "-p"),
+    port: int = typer.Option(8000, "--port", help="Port to run the web UI on"),
+    no_browser: bool = typer.Option(False, "--no-browser", help="Don't open browser automatically"),
+):
+    """Launch the web dashboard (visual interface)."""
+    try:
+        import uvicorn
+        from terralchemy.web.app import app as web_app, configure
+    except ImportError:
+        console.print(
+            "[red]Web UI dependencies not installed.[/red]\n"
+            "Install them with: [bold]pip install terralchemy\\[ui][/bold]"
+        )
+        raise typer.Exit(1)
+
+    project_file = find_project_file(Path(project_dir) if project_dir else None)
+    proj_dir = project_file.parent
+    config = ProjectConfig.from_file(project_file)
+
+    configure(proj_dir, config)
+
+    console.print(f"[bold]terralchemy[/bold] v{__version__} — project [cyan]{config.name}[/cyan]")
+    console.print(f"\n  Dashboard: [bold link=http://localhost:{port}]http://localhost:{port}[/bold link]\n")
+
+    if not no_browser:
+        import webbrowser
+        import threading
+        threading.Timer(1.0, lambda: webbrowser.open(f"http://localhost:{port}")).start()
+
+    uvicorn.run(web_app, host="0.0.0.0", port=port, log_level="warning")
+
+
+@app.command()
 def version():
     """Show terralchemy version."""
     console.print(f"terralchemy v{__version__}")

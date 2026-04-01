@@ -31,9 +31,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ui = [
+    "fastapi>=0.111.0",
+    "uvicorn>=0.30.0",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.4.0",
+]
+all = [
+    "terralchemy[ui,dev]",
 ]
 
 [project.scripts]

@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>terralchemy</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/vis-network@9.1.6/standalone/umd/vis-network.min.js"></script>
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .tab-active { border-bottom: 2px solid #8b5cf6; color: #8b5cf6; font-weight: 600; }
+    .tab-inactive { color: #6b7280; }
+    .tab-inactive:hover { color: #374151; }
+    #dag-container { width: 100%; height: 400px; border: 1px solid #e5e7eb; border-radius: 8px; }
+    #map { width: 100%; height: 450px; border-radius: 8px; }
+    .log-source { color: #3b82f6; }
+    .log-model { color: #10b981; }
+    .log-error { color: #ef4444; }
+    .test-pass { background: #ecfdf5; border-left: 4px solid #10b981; }
+    .test-fail { background: #fef2f2; border-left: 4px solid #ef4444; }
+    .sql-editor {
+      font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+      font-size: 14px;
+      tab-size: 2;
+      line-height: 1.6;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      border-radius: 8px;
+      padding: 16px;
+      resize: vertical;
+      min-height: 200px;
+    }
+    .source-card { transition: all 0.2s; }
+    .source-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .pulse { animation: pulse 2s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .fade-in { animation: fadeIn 0.3s ease-in; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-gray-200 px-6 py-4">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 bg-gradient-to-br from-violet-500 to-amber-500 rounded-lg"></div>
+        <h1 class="text-xl font-bold text-gray-900">terralchemy</h1>
+        <span id="project-name" class="text-sm text-gray-500 bg-gray-100 px-2 py-0.5 rounded">loading...</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <button onclick="runPipeline()" class="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition font-medium text-sm flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          Run Pipeline
+        </button>
+        <button onclick="runTests()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition font-medium text-sm flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          Run Tests
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <nav class="bg-white border-b border-gray-200 px-6">
+    <div class="max-w-7xl mx-auto flex gap-6">
+      <button onclick="switchTab('overview')" id="tab-overview" class="py-3 text-sm tab-active">Overview</button>
+      <button onclick="switchTab('sources')" id="tab-sources" class="py-3 text-sm tab-inactive">Sources</button>
+      <button onclick="switchTab('models')" id="tab-models" class="py-3 text-sm tab-inactive">Models</button>
+      <button onclick="switchTab('dag')" id="tab-dag" class="py-3 text-sm tab-inactive">Pipeline DAG</button>
+      <button onclick="switchTab('map')" id="tab-map" class="py-3 text-sm tab-inactive">Map Preview</button>
+      <button onclick="switchTab('logs')" id="tab-logs" class="py-3 text-sm tab-inactive">Run Output</button>
+    </div>
+  </nav>
+
+  <!-- Content -->
+  <main class="max-w-7xl mx-auto px-6 py-6">
+
+    <!-- Overview Tab -->
+    <div id="panel-overview" class="fade-in">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-xl p-5 border border-gray-200">
+          <div class="text-2xl font-bold text-gray-900" id="stat-sources">-</div>
+          <div class="text-sm text-gray-500 mt-1">Sources</div>
+        </div>
+        <div class="bg-white rounded-xl p-5 border border-gray-200">
+          <div class="text-2xl font-bold text-gray-900" id="stat-models">-</div>
+          <div class="text-sm text-gray-500 mt-1">Models</div>
+        </div>
+        <div class="bg-white rounded-xl p-5 border border-gray-200">
+          <div class="text-2xl font-bold text-gray-900" id="stat-tests">-</div>
+          <div class="text-sm text-gray-500 mt-1">Tests</div>
+        </div>
+        <div class="bg-white rounded-xl p-5 border border-gray-200">
+          <div class="text-2xl font-bold" id="stat-status">Ready</div>
+          <div class="text-sm text-gray-500 mt-1">Status</div>
+        </div>
+      </div>
+
+      <!-- Inline DAG preview -->
+      <div class="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-3">Pipeline</h2>
+        <div id="dag-overview" style="height: 300px; border: 1px solid #e5e7eb; border-radius: 8px;"></div>
+      </div>
+
+      <!-- Quick start guide -->
+      <div class="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 class="text-lg font-semibold text-gray-900 mb-3">Quick Start</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          <div class="p-4 bg-blue-50 rounded-lg">
+            <div class="font-semibold text-blue-900 mb-1">1. Add Data</div>
+            <div class="text-blue-700">Drop geo files (Shapefile, GeoJSON, GeoPackage, etc.) into your project's <code class="bg-blue-100 px-1 rounded">data/</code> folder, then define them in <code class="bg-blue-100 px-1 rounded">sources/*.yml</code></div>
+          </div>
+          <div class="p-4 bg-violet-50 rounded-lg">
+            <div class="font-semibold text-violet-900 mb-1">2. Write Models</div>
+            <div class="text-violet-700">Create SQL files in <code class="bg-violet-100 px-1 rounded">models/</code> using spatial functions like ST_Buffer, ST_Within, ST_Intersects. Use the Models tab to edit.</div>
+          </div>
+          <div class="p-4 bg-emerald-50 rounded-lg">
+            <div class="font-semibold text-emerald-900 mb-1">3. Run & Test</div>
+            <div class="text-emerald-700">Click <strong>Run Pipeline</strong> to execute, then <strong>Run Tests</strong> to validate. Preview results on the Map tab.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sources Tab -->
+    <div id="panel-sources" class="hidden fade-in">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">Data Sources</h2>
+      <div id="sources-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="text-gray-400">Loading sources...</div>
+      </div>
+    </div>
+
+    <!-- Models Tab -->
+    <div id="panel-models" class="hidden fade-in">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-gray-900">SQL Models</h2>
+        <button onclick="showNewModelForm()" class="px-3 py-1.5 bg-violet-100 text-violet-700 rounded-lg hover:bg-violet-200 transition text-sm font-medium">+ New Model</button>
+      </div>
+      <div id="models-list" class="space-y-4">
+        <div class="text-gray-400">Loading models...</div>
+      </div>
+    </div>
+
+    <!-- DAG Tab -->
+    <div id="panel-dag" class="hidden fade-in">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">Pipeline Dependency Graph</h2>
+      <div class="bg-white rounded-xl border border-gray-200 p-4">
+        <div id="dag-container"></div>
+      </div>
+      <div class="mt-4 flex items-center gap-6 text-sm text-gray-500">
+        <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-blue-500"></div> Source</div>
+        <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-violet-500"></div> Model</div>
+        <div class="text-gray-400">Arrows show data flow direction</div>
+      </div>
+    </div>
+
+    <!-- Map Tab -->
+    <div id="panel-map" class="hidden fade-in">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-gray-900">Map Preview</h2>
+        <select id="map-model-select" onchange="loadMapPreview()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+          <option value="">Select a model to preview...</option>
+        </select>
+      </div>
+      <div class="bg-white rounded-xl border border-gray-200 p-4">
+        <div id="map"></div>
+      </div>
+      <div id="map-info" class="mt-3 text-sm text-gray-500"></div>
+    </div>
+
+    <!-- Logs Tab -->
+    <div id="panel-logs" class="hidden fade-in">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">Run Output</h2>
+
+      <!-- Run logs -->
+      <div id="run-output" class="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+        <h3 class="font-semibold text-gray-700 mb-3">Pipeline Run</h3>
+        <div id="run-logs" class="space-y-2 text-sm font-mono">
+          <div class="text-gray-400">Click "Run Pipeline" to see output here.</div>
+        </div>
+      </div>
+
+      <!-- Test results -->
+      <div id="test-output" class="bg-white rounded-xl border border-gray-200 p-5">
+        <h3 class="font-semibold text-gray-700 mb-3">Test Results</h3>
+        <div id="test-results" class="space-y-2">
+          <div class="text-sm text-gray-400">Click "Run Tests" to see results here.</div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+// State
+let projectData = {};
+let sourcesData = [];
+let modelsData = [];
+let dagData = {};
+let mapInstance = null;
+let mapLayer = null;
+let dagNetwork = null;
+
+// Tab switching
+function switchTab(tab) {
+  document.querySelectorAll('[id^="panel-"]').forEach(p => p.classList.add('hidden'));
+  document.querySelectorAll('[id^="tab-"]').forEach(t => { t.className = 'py-3 text-sm tab-inactive'; });
+  document.getElementById('panel-' + tab).classList.remove('hidden');
+  document.getElementById('tab-' + tab).className = 'py-3 text-sm tab-active';
+
+  if (tab === 'dag') renderDAG('dag-container');
+  if (tab === 'map') initMap();
+}
+
+// Load all data
+async function loadAll() {
+  try {
+    const [proj, sources, models, dag] = await Promise.all([
+      fetch('/api/project').then(r => r.json()),
+      fetch('/api/sources').then(r => r.json()),
+      fetch('/api/models').then(r => r.json()),
+      fetch('/api/dag').then(r => r.json()),
+    ]);
+    projectData = proj;
+    sourcesData = sources;
+    modelsData = models;
+    dagData = dag;
+    renderAll();
+  } catch (e) {
+    console.error('Load failed:', e);
+  }
+}
+
+function renderAll() {
+  // Header
+  document.getElementById('project-name').textContent = projectData.name;
+
+  // Stats
+  document.getElementById('stat-sources').textContent = sourcesData.length;
+  document.getElementById('stat-models').textContent = modelsData.length;
+  document.getElementById('stat-tests').textContent = '-';
+
+  // Overview DAG
+  renderDAG('dag-overview');
+
+  // Sources
+  renderSources();
+
+  // Models
+  renderModels();
+
+  // Map dropdown
+  const select = document.getElementById('map-model-select');
+  select.innerHTML = '<option value="">Select a model to preview...</option>';
+  modelsData.forEach(m => {
+    select.innerHTML += `<option value="${m.name}">${m.name}</option>`;
+  });
+  // Also add sources
+  sourcesData.forEach(s => {
+    select.innerHTML += `<option value="source:${s.name}">${s.name} (source)</option>`;
+  });
+}
+
+function renderSources() {
+  const container = document.getElementById('sources-list');
+  if (sourcesData.length === 0) {
+    container.innerHTML = '<div class="text-gray-400 col-span-3">No sources defined. Add source definitions to sources/*.yml</div>';
+    return;
+  }
+  container.innerHTML = sourcesData.map(s => `
+    <div class="source-card bg-white rounded-xl border border-gray-200 p-5">
+      <div class="flex items-center gap-2 mb-2">
+        <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+        <h3 class="font-semibold text-gray-900">${s.name}</h3>
+      </div>
+      <div class="text-sm text-gray-500 space-y-1">
+        <div><span class="text-gray-400">Format:</span> ${s.format}</div>
+        <div><span class="text-gray-400">CRS:</span> ${s.crs || 'auto'}</div>
+        <div class="truncate"><span class="text-gray-400">Path:</span> ${s.path.split('/').pop()}</div>
+        ${s.description ? `<div class="mt-2 text-gray-600">${s.description}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderModels() {
+  const container = document.getElementById('models-list');
+  if (modelsData.length === 0) {
+    container.innerHTML = '<div class="text-gray-400">No models found. Create SQL files in models/</div>';
+    return;
+  }
+  container.innerHTML = modelsData.map(m => `
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-2 h-2 rounded-full bg-violet-500"></div>
+          <h3 class="font-semibold text-gray-900">${m.name}</h3>
+          <span class="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded">${m.output_format}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="saveModel('${m.name}')" class="px-3 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition text-xs font-medium">Save</button>
+          <button onclick="previewModel('${m.name}')" class="px-3 py-1 bg-violet-100 text-violet-700 rounded hover:bg-violet-200 transition text-xs font-medium">Preview on Map</button>
+        </div>
+      </div>
+      ${m.description ? `<p class="text-sm text-gray-500 mb-3">${m.description}</p>` : ''}
+      <div class="text-xs text-gray-400 mb-2">
+        ${m.source_dependencies.length ? 'Sources: ' + m.source_dependencies.join(', ') : ''}
+        ${m.ref_dependencies.length ? ' | Depends on: ' + m.ref_dependencies.join(', ') : ''}
+      </div>
+      <textarea id="editor-${m.name}" class="sql-editor w-full" spellcheck="false">${escapeHtml(m.sql)}</textarea>
+    </div>
+  `).join('');
+}
+
+function showNewModelForm() {
+  const name = prompt('Model name (no spaces, no .sql extension):');
+  if (!name) return;
+  const sql = `-- description: New model\n-- output_format: geoparquet\n\nSELECT *\nFROM {{ source('your_source') }}`;
+  modelsData.push({
+    name: name,
+    sql: sql,
+    output_format: 'geoparquet',
+    description: 'New model',
+    ref_dependencies: [],
+    source_dependencies: [],
+  });
+  renderModels();
+}
+
+async function saveModel(name) {
+  const textarea = document.getElementById('editor-' + name);
+  if (!textarea) return;
+  try {
+    const resp = await fetch('/api/models/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, sql: textarea.value }),
+    });
+    const data = await resp.json();
+    if (data.success) {
+      showToast('Model "' + name + '" saved');
+      loadAll();
+    } else {
+      showToast('Error saving: ' + data.error, true);
+    }
+  } catch (e) {
+    showToast('Save failed: ' + e.message, true);
+  }
+}
+
+// DAG rendering
+function renderDAG(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container || !dagData.nodes) return;
+
+  const nodes = dagData.nodes.map(n => ({
+    id: n.id,
+    label: n.label,
+    color: n.type === 'source' ? { background: '#dbeafe', border: '#3b82f6' }
+                                : { background: '#ede9fe', border: '#8b5cf6' },
+    shape: n.type === 'source' ? 'database' : 'box',
+    font: { size: 14, face: 'system-ui' },
+    borderWidth: 2,
+    margin: 10,
+  }));
+
+  const edges = dagData.edges.map(e => ({
+    from: e.from,
+    to: e.to,
+    arrows: 'to',
+    color: { color: '#9ca3af', hover: '#6b7280' },
+    smooth: { type: 'cubicBezier' },
+  }));
+
+  const options = {
+    layout: {
+      hierarchical: {
+        direction: 'LR',
+        sortMethod: 'directed',
+        levelSeparation: 200,
+        nodeSpacing: 80,
+      }
+    },
+    physics: false,
+    interaction: { hover: true, zoomView: true, dragView: true },
+  };
+
+  new vis.Network(container, { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) }, options);
+}
+
+// Map
+function initMap() {
+  if (mapInstance) return;
+  setTimeout(() => {
+    mapInstance = L.map('map').setView([28.5, -81.5], 7);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(mapInstance);
+  }, 100);
+}
+
+async function loadMapPreview() {
+  const select = document.getElementById('map-model-select');
+  const value = select.value;
+  if (!value) return;
+  if (!mapInstance) initMap();
+
+  const info = document.getElementById('map-info');
+  info.textContent = 'Loading preview...';
+
+  // Handle source previews by running a pass-through
+  let url;
+  if (value.startsWith('source:')) {
+    // For sources, we need to run the pipeline first, so just use a model
+    info.textContent = 'Source preview requires running the pipeline first. Select a model instead.';
+    return;
+  } else {
+    url = `/api/preview/${value}`;
+  }
+
+  try {
+    const resp = await fetch(url);
+    const geojson = await resp.json();
+
+    if (mapLayer) mapInstance.removeLayer(mapLayer);
+
+    if (geojson.type === 'FeatureCollection') {
+      mapLayer = L.geoJSON(geojson, {
+        style: {
+          color: '#8b5cf6',
+          weight: 2,
+          fillColor: '#8b5cf6',
+          fillOpacity: 0.2,
+        },
+        pointToLayer: (feature, latlng) => {
+          return L.circleMarker(latlng, {
+            radius: 8,
+            color: '#8b5cf6',
+            weight: 2,
+            fillColor: '#8b5cf6',
+            fillOpacity: 0.5,
+          });
+        },
+        onEachFeature: (feature, layer) => {
+          if (feature.properties) {
+            const rows = Object.entries(feature.properties)
+              .map(([k, v]) => `<tr><td class="font-semibold pr-2">${k}</td><td>${v}</td></tr>`)
+              .join('');
+            layer.bindPopup(`<table style="font-size:12px">${rows}</table>`);
+          }
+        },
+      }).addTo(mapInstance);
+
+      mapInstance.fitBounds(mapLayer.getBounds().pad(0.1));
+      info.textContent = `Showing ${geojson.features.length} features from "${value}"`;
+    } else {
+      info.textContent = 'Model has no geometry column — tabular data only.';
+    }
+  } catch (e) {
+    info.textContent = 'Error loading preview. Run the pipeline first, then try again.';
+  }
+}
+
+function previewModel(name) {
+  switchTab('map');
+  document.getElementById('map-model-select').value = name;
+  setTimeout(() => loadMapPreview(), 200);
+}
+
+// Run pipeline
+async function runPipeline() {
+  const status = document.getElementById('stat-status');
+  status.textContent = 'Running...';
+  status.className = 'text-2xl font-bold text-amber-500 pulse';
+
+  switchTab('logs');
+  const logs = document.getElementById('run-logs');
+  logs.innerHTML = '<div class="text-gray-400 pulse">Running pipeline...</div>';
+
+  try {
+    const resp = await fetch('/api/run', { method: 'POST' });
+    const data = await resp.json();
+
+    if (data.success) {
+      status.textContent = 'Success';
+      status.className = 'text-2xl font-bold text-emerald-600';
+
+      logs.innerHTML = data.logs.map(log => {
+        if (log.type === 'source') {
+          return `<div class="log-source">&#9632; Loaded source: ${log.name}</div>`;
+        } else {
+          return `<div class="log-model">&#9654; Model: ${log.name} &rarr; ${log.output} <span class="text-gray-400">(${log.rows} rows)</span></div>`;
+        }
+      }).join('') + `<div class="mt-3 font-semibold text-emerald-600">Pipeline complete. ${Object.keys(data.outputs).length} models materialized.</div>`;
+
+      showToast('Pipeline completed successfully');
+      loadAll();
+    } else {
+      status.textContent = 'Error';
+      status.className = 'text-2xl font-bold text-red-600';
+      logs.innerHTML = `<div class="log-error">Error: ${escapeHtml(data.error)}</div><pre class="text-xs text-gray-500 mt-2 overflow-auto">${escapeHtml(data.traceback || '')}</pre>`;
+      showToast('Pipeline failed', true);
+    }
+  } catch (e) {
+    status.textContent = 'Error';
+    status.className = 'text-2xl font-bold text-red-600';
+    logs.innerHTML = `<div class="log-error">Connection error: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// Run tests
+async function runTests() {
+  switchTab('logs');
+  const results = document.getElementById('test-results');
+  results.innerHTML = '<div class="text-gray-400 pulse">Running tests...</div>';
+
+  try {
+    const resp = await fetch('/api/test', { method: 'POST' });
+    const data = await resp.json();
+
+    if (data.success) {
+      document.getElementById('stat-tests').textContent = `${data.passed}/${data.total}`;
+
+      if (data.results.length === 0) {
+        results.innerHTML = '<div class="text-gray-400">No tests defined. Add test definitions to tests/*.yml</div>';
+        return;
+      }
+
+      results.innerHTML = data.results.map(r => `
+        <div class="p-3 rounded-lg ${r.passed ? 'test-pass' : 'test-fail'}">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="font-medium ${r.passed ? 'text-emerald-800' : 'text-red-800'}">${r.passed ? 'PASS' : 'FAIL'}</span>
+              <span class="text-gray-700 font-medium">${r.name}</span>
+            </div>
+            <div class="text-sm text-gray-500">${r.model} &middot; ${r.test_type}</div>
+          </div>
+          <div class="text-sm text-gray-600 mt-1">${r.message}</div>
+        </div>
+      `).join('');
+
+      const summary = data.failed === 0
+        ? `<div class="mt-3 font-semibold text-emerald-600">All ${data.total} tests passed.</div>`
+        : `<div class="mt-3 font-semibold text-red-600">${data.failed} of ${data.total} tests failed.</div>`;
+      results.innerHTML += summary;
+
+      showToast(data.failed === 0 ? 'All tests passed' : `${data.failed} tests failed`, data.failed > 0);
+    } else {
+      results.innerHTML = `<div class="text-red-600">Error: ${escapeHtml(data.error)}</div>`;
+    }
+  } catch (e) {
+    results.innerHTML = `<div class="text-red-600">Connection error: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// Toast notification
+function showToast(message, isError = false) {
+  const toast = document.createElement('div');
+  toast.className = `fixed bottom-4 right-4 px-4 py-3 rounded-lg shadow-lg text-sm font-medium text-white z-50 fade-in ${isError ? 'bg-red-600' : 'bg-emerald-600'}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Init
+loadAll();
+</script>
+</body>
+</html>

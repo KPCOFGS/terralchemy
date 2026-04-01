@@ -33,14 +33,36 @@ sources/             models/                    target/
 ## Installation
 
 ```bash
-# Install from GitHub
-pip install git+https://github.com/KPCOFGS/terralchemy.git
+# Install from GitHub (with web dashboard)
+pip install "terralchemy[ui] @ git+https://github.com/KPCOFGS/terralchemy.git"
 
 # Or clone and install locally
 git clone https://github.com/KPCOFGS/terralchemy.git
 cd terralchemy
-pip install -e .
+pip install -e ".[ui]"
 ```
+
+> The `[ui]` extra installs the web dashboard. If you only want the CLI, drop it: `pip install git+https://...`
+
+## Web Dashboard
+
+**Don't want to use the terminal? No problem.** terralchemy comes with a full visual interface.
+
+```bash
+terralchemy ui
+```
+
+This opens a browser dashboard where you can:
+
+- See your entire pipeline as an **interactive visual graph** (drag, zoom, explore)
+- **Run the pipeline** and **run tests** with a single click
+- **Edit SQL models** directly in the browser with a code editor
+- **Preview results on a map** — points, polygons, and lines rendered on OpenStreetMap
+- Click on features to see their properties in a popup
+- View detailed **test results** with pass/fail indicators
+- **Create new models** from the UI without touching the file system
+
+The dashboard works with any terralchemy project. Just `cd` into your project folder and run `terralchemy ui`.
 
 ## Quickstart — Full Walkthrough
 
