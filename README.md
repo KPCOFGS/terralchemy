@@ -104,6 +104,14 @@ That's it. Your browser opens with the full dashboard. From there you can do eve
 - Click on features to see their properties in a popup
 - Points, polygons, and lines all supported
 
+| Overview | Sources | Models |
+|:---:|:---:|:---:|
+| ![Overview](docs/screenshots/pic_1.png) | ![Sources](docs/screenshots/pic_2.png) | ![Models](docs/screenshots/pic_3.png) |
+| Dashboard with pipeline graph and quick start guide | Drag & drop file upload with auto-registration | SQL editor with save, preview, and delete |
+| **Pipeline DAG** | **Map Preview** | **Run Output & Tests** |
+| ![DAG](docs/screenshots/pic_4.png) | ![Map](docs/screenshots/pic_5.png) | ![Tests](docs/screenshots/pic_6.png) |
+| Interactive dependency graph (drag, zoom) | Results rendered on OpenStreetMap | One-click run, test builder, pass/fail results |
+
 ## Quickstart — Full Walkthrough
 
 This walkthrough takes you from zero to a working spatial pipeline in about 5 minutes. We'll use a small GeoJSON file with Florida cities as our example data.
