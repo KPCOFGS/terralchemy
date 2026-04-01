@@ -397,14 +397,32 @@ async def preview_model(model_name: str):
                 )
                 model_views[mn] = f"__model__{mn}"
 
-            cols = [row[0] for row in engine.query(f"DESCRIBE __model__{model_name}")]
+            col_info = engine.query(f"DESCRIBE __model__{model_name}")
+            cols = [row[0] for row in col_info]
+            col_types = {row[0]: row[1] for row in col_info}
 
-            has_geometry = "geometry" in cols
+            # Find the primary geometry column and skip all geometry/blob columns from properties
+            # DuckDB types can include CRS suffix like GEOMETRY('EPSG:4326'), so check prefix
+            geom_prefixes = ("GEOMETRY", "BLOB", "WKB_BLOB", "POINT", "LINESTRING", "POLYGON",
+                             "MULTIPOINT", "MULTILINESTRING", "MULTIPOLYGON", "GEOMETRYCOLLECTION")
+
+            def is_geom_type(type_str):
+                t = type_str.upper().split("(")[0].strip()
+                return t in geom_prefixes
+
+            geom_col = None
+            for c in cols:
+                if is_geom_type(col_types[c]):
+                    if geom_col is None:
+                        geom_col = c
+            has_geometry = geom_col is not None
+
             if has_geometry:
-                non_geom = [c for c in cols if c != "geometry"]
+                # Exclude ALL geometry/blob columns from properties
+                non_geom = [c for c in cols if not is_geom_type(col_types[c])]
                 props_sql = ", ".join(non_geom) if non_geom else "'no_props' AS _placeholder"
                 rows = engine.query(
-                    f"SELECT {props_sql}, ST_AsGeoJSON(geometry) AS __geojson "
+                    f"SELECT {props_sql}, ST_AsGeoJSON({geom_col}) AS __geojson "
                     f"FROM __model__{model_name} LIMIT 1000"
                 )
                 features = []
