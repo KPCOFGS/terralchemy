@@ -46,23 +46,35 @@ pip install -e ".[ui]"
 
 ## Web Dashboard
 
-**Don't want to use the terminal? No problem.** terralchemy comes with a full visual interface.
+**Don't want to use the terminal? You don't have to.** After the initial setup (two commands), everything else happens in the browser.
 
 ```bash
+terralchemy init my_project
+cd my_project
 terralchemy ui
 ```
 
-This opens a browser dashboard where you can:
+That's it. Your browser opens with the full dashboard. From there you can do everything without ever going back to the terminal:
 
-- See your entire pipeline as an **interactive visual graph** (drag, zoom, explore)
-- **Run the pipeline** and **run tests** with a single click
-- **Edit SQL models** directly in the browser with a code editor
-- **Preview results on a map** — points, polygons, and lines rendered on OpenStreetMap
+**Upload & manage data**
+- **Drag & drop** geo files (Shapefile, GeoJSON, GeoPackage, GeoParquet, FlatGeobuf, KML, CSV) right into the browser
+- Files are automatically saved and registered as sources — pick a name, set the CRS, done
+- Delete sources you don't need anymore with one click
+
+**Build pipelines visually**
+- Click **+ New Model** and pick from built-in templates: filter rows, spatial join, buffer, centroid, aggregate by region — or start blank
+- Edit SQL directly in the browser's code editor
+- See your pipeline as an **interactive graph** — drag, zoom, explore the full dependency chain
+
+**Run & test with one click**
+- Hit **Run Pipeline** — watch sources load and models materialize in real time
+- Use the **Test Builder** to add quality checks (geometry validity, bounds, row counts) without writing YAML
+- Test results show pass/fail with clear messages
+
+**Preview results on a map**
+- Select any model and see the output rendered on an OpenStreetMap basemap
 - Click on features to see their properties in a popup
-- View detailed **test results** with pass/fail indicators
-- **Create new models** from the UI without touching the file system
-
-The dashboard works with any terralchemy project. Just `cd` into your project folder and run `terralchemy ui`.
+- Points, polygons, and lines all supported
 
 ## Quickstart — Full Walkthrough
 

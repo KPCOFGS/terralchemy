@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
 import traceback
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+import yaml
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from terralchemy.dag import build_dag, execute_pipeline, get_execution_order
@@ -16,11 +18,10 @@ from terralchemy.engine import SpatialEngine
 from terralchemy.models import load_models
 from terralchemy.project import ProjectConfig
 from terralchemy.sources import load_sources
-from terralchemy.testing import run_all_tests
+from terralchemy.testing import load_tests, run_all_tests
 
 app = FastAPI(title="terralchemy", docs_url=None, redoc_url=None)
 
-# Will be set when the server starts
 _project_dir: Optional[Path] = None
 _config: Optional[ProjectConfig] = None
 
@@ -37,6 +38,8 @@ async def index():
     return HTMLResponse(html_path.read_text())
 
 
+# ── Project ──────────────────────────────────────────────────────────
+
 @app.get("/api/project")
 async def get_project():
     return {
@@ -49,6 +52,8 @@ async def get_project():
         "project_dir": str(_project_dir),
     }
 
+
+# ── Sources ──────────────────────────────────────────────────────────
 
 @app.get("/api/sources")
 async def get_sources():
@@ -64,6 +69,104 @@ async def get_sources():
         for s in sources.values()
     ]
 
+
+@app.post("/api/sources/upload")
+async def upload_source(
+    file: UploadFile = File(...),
+    name: str = Form(...),
+    crs: str = Form("EPSG:4326"),
+    description: str = Form(""),
+):
+    """Upload a geo file and auto-register it as a source."""
+    # Save file to data/
+    data_dir = _project_dir / "data"
+    data_dir.mkdir(exist_ok=True)
+    file_path = data_dir / file.filename
+    content = await file.read()
+    file_path.write_bytes(content)
+
+    # Detect format from extension
+    ext = file_path.suffix.lower().lstrip(".")
+    fmt_map = {
+        "shp": "shapefile", "geojson": "geojson", "json": "geojson",
+        "gpkg": "geopackage", "parquet": "geoparquet", "fgb": "flatgeobuf",
+        "kml": "kml", "csv": "csv",
+    }
+    fmt = fmt_map.get(ext, ext)
+
+    # Write source YAML
+    sources_dir = _project_dir / _config.sources_path
+    sources_dir.mkdir(exist_ok=True)
+    source_yml = sources_dir / f"{name}.yml"
+
+    source_def = {
+        "sources": [{
+            "name": name,
+            "path": f"data/{file.filename}",
+            "format": fmt,
+            "crs": crs,
+            "description": description,
+        }]
+    }
+    source_yml.write_text(yaml.dump(source_def, default_flow_style=False))
+
+    return {
+        "success": True,
+        "name": name,
+        "file": file.filename,
+        "format": fmt,
+        "source_yml": str(source_yml),
+    }
+
+
+class CreateSourceRequest(BaseModel):
+    name: str
+    path: str
+    crs: str = "EPSG:4326"
+    description: str = ""
+
+
+@app.post("/api/sources/create")
+async def create_source(req: CreateSourceRequest):
+    """Register an existing file as a source (no upload)."""
+    ext = Path(req.path).suffix.lower().lstrip(".")
+    fmt_map = {
+        "shp": "shapefile", "geojson": "geojson", "json": "geojson",
+        "gpkg": "geopackage", "parquet": "geoparquet", "fgb": "flatgeobuf",
+        "kml": "kml", "csv": "csv",
+    }
+    fmt = fmt_map.get(ext, ext)
+
+    sources_dir = _project_dir / _config.sources_path
+    sources_dir.mkdir(exist_ok=True)
+    source_yml = sources_dir / f"{req.name}.yml"
+
+    source_def = {
+        "sources": [{
+            "name": req.name,
+            "path": req.path,
+            "format": fmt,
+            "crs": req.crs,
+            "description": req.description,
+        }]
+    }
+    source_yml.write_text(yaml.dump(source_def, default_flow_style=False))
+    return {"success": True, "name": req.name}
+
+
+@app.delete("/api/sources/{name}")
+async def delete_source(name: str):
+    """Delete a source definition."""
+    sources_dir = _project_dir / _config.sources_path
+    yml_path = sources_dir / f"{name}.yml"
+    if yml_path.exists():
+        yml_path.unlink()
+        return {"success": True}
+    # May be inside a multi-source file — not handled for simplicity
+    return {"success": False, "error": "Source file not found"}
+
+
+# ── Models ───────────────────────────────────────────────────────────
 
 @app.get("/api/models")
 async def get_models():
@@ -83,6 +186,58 @@ async def get_models():
     ]
 
 
+class SaveModelRequest(BaseModel):
+    name: str
+    sql: str
+
+
+@app.post("/api/models/save")
+async def save_model(req: SaveModelRequest):
+    """Save or update a SQL model file."""
+    models_dir = _project_dir / _config.models_path
+    models_dir.mkdir(exist_ok=True)
+    path = models_dir / f"{req.name}.sql"
+    path.write_text(req.sql)
+    return {"success": True, "path": str(path)}
+
+
+@app.delete("/api/models/{name}")
+async def delete_model(name: str):
+    """Delete a model."""
+    models_dir = _project_dir / _config.models_path
+    path = models_dir / f"{name}.sql"
+    if path.exists():
+        path.unlink()
+        return {"success": True}
+    return {"success": False, "error": "Model not found"}
+
+
+# ── Tests ────────────────────────────────────────────────────────────
+
+@app.get("/api/tests")
+async def get_tests():
+    tests_dir = _project_dir / _config.tests_path
+    tests = load_tests(tests_dir)
+    return tests
+
+
+class SaveTestsRequest(BaseModel):
+    filename: str
+    tests: list[dict]
+
+
+@app.post("/api/tests/save")
+async def save_tests(req: SaveTestsRequest):
+    """Save test definitions to a YAML file."""
+    tests_dir = _project_dir / _config.tests_path
+    tests_dir.mkdir(exist_ok=True)
+    path = tests_dir / f"{req.filename}.yml"
+    path.write_text(yaml.dump({"tests": req.tests}, default_flow_style=False))
+    return {"success": True, "path": str(path)}
+
+
+# ── DAG ──────────────────────────────────────────────────────────────
+
 @app.get("/api/dag")
 async def get_dag():
     sources = load_sources(_project_dir / _config.sources_path, _project_dir)
@@ -95,11 +250,7 @@ async def get_dag():
 
     for node_id in dag.nodes:
         data = dag.nodes[node_id]
-        node = {
-            "id": node_id,
-            "label": data["name"],
-            "type": data["type"],
-        }
+        node = {"id": node_id, "label": data["name"], "type": data["type"]}
         if data["type"] == "model" and data["name"] in models:
             node["output_format"] = models[data["name"]].output_format
         nodes.append(node)
@@ -109,6 +260,8 @@ async def get_dag():
 
     return {"nodes": nodes, "edges": edges, "execution_order": order}
 
+
+# ── Run / Test ───────────────────────────────────────────────────────
 
 @app.post("/api/run")
 async def run_pipeline(select: Optional[str] = None):
@@ -124,14 +277,12 @@ async def run_pipeline(select: Optional[str] = None):
         logs = []
 
         with SpatialEngine(db_path) as engine:
-            # Load sources
             source_views = {}
             for name, source in sources.items():
                 engine.load_source(name, source.path, source.crs)
                 source_views[name] = f"__source__{name}"
                 logs.append({"type": "source", "name": name, "status": "loaded"})
 
-            # Execute models
             order = get_execution_order(dag)
             model_views = {}
             outputs = {}
@@ -151,21 +302,18 @@ async def run_pipeline(select: Optional[str] = None):
                 row_count = engine.query(f"SELECT COUNT(*) FROM __model__{model_name}")[0][0]
                 outputs[model_name] = str(output_path)
                 logs.append({
-                    "type": "model",
-                    "name": model_name,
-                    "status": "completed",
-                    "rows": row_count,
+                    "type": "model", "name": model_name,
+                    "status": "completed", "rows": row_count,
                     "output": str(output_path),
                 })
 
         return {"success": True, "logs": logs, "outputs": outputs}
-
     except Exception as e:
         return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
 
 
 @app.post("/api/test")
-async def run_tests():
+async def run_tests_endpoint():
     try:
         sources = load_sources(_project_dir / _config.sources_path, _project_dir)
         models = load_models(_project_dir / _config.models_path)
@@ -175,7 +323,6 @@ async def run_tests():
         target_dir = str(_project_dir / _config.target_path)
 
         with SpatialEngine(db_path) as engine:
-            # Re-materialize
             source_views = {}
             for name, source in sources.items():
                 engine.load_source(name, source.path, source.crs)
@@ -187,10 +334,8 @@ async def run_tests():
                 model = models[model_name]
                 resolved_sql = model.resolve_sql(source_views, model_views)
                 engine.materialize_model(
-                    name=model_name,
-                    sql=resolved_sql,
-                    output_format=model.output_format,
-                    target_dir=target_dir,
+                    name=model_name, sql=resolved_sql,
+                    output_format=model.output_format, target_dir=target_dir,
                 )
                 model_views[model_name] = f"__model__{model_name}"
 
@@ -200,12 +345,8 @@ async def run_tests():
             "success": True,
             "results": [
                 {
-                    "name": r.name,
-                    "model": r.model,
-                    "test_type": r.test_type,
-                    "passed": r.passed,
-                    "message": r.message,
-                    "failing_rows": r.failing_rows,
+                    "name": r.name, "model": r.model, "test_type": r.test_type,
+                    "passed": r.passed, "message": r.message, "failing_rows": r.failing_rows,
                 }
                 for r in results
             ],
@@ -213,10 +354,11 @@ async def run_tests():
             "failed": sum(1 for r in results if not r.passed),
             "total": len(results),
         }
-
     except Exception as e:
         return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
 
+
+# ── Map Preview ──────────────────────────────────────────────────────
 
 @app.get("/api/preview/{model_name}")
 async def preview_model(model_name: str):
@@ -230,7 +372,6 @@ async def preview_model(model_name: str):
         target_dir = str(_project_dir / _config.target_path)
 
         with SpatialEngine(db_path) as engine:
-            # Load and materialize everything needed
             source_views = {}
             for name, source in sources.items():
                 engine.load_source(name, source.path, source.crs)
@@ -247,13 +388,8 @@ async def preview_model(model_name: str):
                 )
                 model_views[mn] = f"__model__{mn}"
 
-            # Get column info
-            cols = [
-                row[0]
-                for row in engine.query(f"DESCRIBE __model__{model_name}")
-            ]
+            cols = [row[0] for row in engine.query(f"DESCRIBE __model__{model_name}")]
 
-            # Build GeoJSON
             has_geometry = "geometry" in cols
             if has_geometry:
                 non_geom = [c for c in cols if c != "geometry"]
@@ -268,7 +404,6 @@ async def preview_model(model_name: str):
                     props = {}
                     for i, col in enumerate(non_geom):
                         val = row[i]
-                        # Convert non-serializable types
                         if isinstance(val, (int, float, str, bool, type(None))):
                             props[col] = val
                         else:
@@ -284,31 +419,11 @@ async def preview_model(model_name: str):
                     "meta": {"model": model_name, "total_rows": len(features)},
                 }
             else:
-                # No geometry — return tabular data
-                rows = engine.query(
-                    f"SELECT * FROM __model__{model_name} LIMIT 100"
-                )
+                rows = engine.query(f"SELECT * FROM __model__{model_name} LIMIT 100")
                 return {
-                    "type": "table",
-                    "columns": cols,
+                    "type": "table", "columns": cols,
                     "rows": [[str(v) for v in row] for row in rows],
                     "meta": {"model": model_name},
                 }
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-class SaveModelRequest(BaseModel):
-    name: str
-    sql: str
-
-
-@app.post("/api/models/save")
-async def save_model(req: SaveModelRequest):
-    """Save or update a SQL model file."""
-    models_dir = _project_dir / _config.models_path
-    models_dir.mkdir(exist_ok=True)
-    path = models_dir / f"{req.name}.sql"
-    path.write_text(req.sql)
-    return {"success": True, "path": str(path)}

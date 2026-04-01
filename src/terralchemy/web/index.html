@@ -110,19 +110,23 @@
 
       <!-- Quick start guide -->
       <div class="bg-white rounded-xl border border-gray-200 p-5">
-        <h2 class="text-lg font-semibold text-gray-900 mb-3">Quick Start</h2>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <h2 class="text-lg font-semibold text-gray-900 mb-3">Getting Started — Everything happens here in the browser</h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
           <div class="p-4 bg-blue-50 rounded-lg">
-            <div class="font-semibold text-blue-900 mb-1">1. Add Data</div>
-            <div class="text-blue-700">Drop geo files (Shapefile, GeoJSON, GeoPackage, etc.) into your project's <code class="bg-blue-100 px-1 rounded">data/</code> folder, then define them in <code class="bg-blue-100 px-1 rounded">sources/*.yml</code></div>
+            <div class="font-semibold text-blue-900 mb-1">1. Upload Data</div>
+            <div class="text-blue-700">Go to the <strong>Sources</strong> tab and drag & drop your geo files (Shapefile, GeoJSON, GeoPackage, etc.). We'll register them automatically.</div>
           </div>
           <div class="p-4 bg-violet-50 rounded-lg">
-            <div class="font-semibold text-violet-900 mb-1">2. Write Models</div>
-            <div class="text-violet-700">Create SQL files in <code class="bg-violet-100 px-1 rounded">models/</code> using spatial functions like ST_Buffer, ST_Within, ST_Intersects. Use the Models tab to edit.</div>
+            <div class="font-semibold text-violet-900 mb-1">2. Create Models</div>
+            <div class="text-violet-700">Go to the <strong>Models</strong> tab and click <strong>+ New Model</strong>. Pick a template (filter, spatial join, buffer, etc.) and customize the SQL.</div>
+          </div>
+          <div class="p-4 bg-amber-50 rounded-lg">
+            <div class="font-semibold text-amber-900 mb-1">3. Add Tests</div>
+            <div class="text-amber-700">Go to <strong>Run Output</strong> tab and use the <strong>Test Builder</strong> to add quality checks — geometry validity, bounds, row counts.</div>
           </div>
           <div class="p-4 bg-emerald-50 rounded-lg">
-            <div class="font-semibold text-emerald-900 mb-1">3. Run & Test</div>
-            <div class="text-emerald-700">Click <strong>Run Pipeline</strong> to execute, then <strong>Run Tests</strong> to validate. Preview results on the Map tab.</div>
+            <div class="font-semibold text-emerald-900 mb-1">4. Run & Preview</div>
+            <div class="text-emerald-700">Click <strong>Run Pipeline</strong> at the top, then go to the <strong>Map Preview</strong> tab to see your results on a map.</div>
           </div>
         </div>
       </div>
@@ -130,7 +134,57 @@
 
     <!-- Sources Tab -->
     <div id="panel-sources" class="hidden fade-in">
-      <h2 class="text-lg font-semibold text-gray-900 mb-4">Data Sources</h2>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-gray-900">Data Sources</h2>
+      </div>
+
+      <!-- Upload zone -->
+      <div id="upload-zone" class="border-2 border-dashed border-gray-300 rounded-xl p-8 mb-6 text-center hover:border-violet-400 hover:bg-violet-50 transition cursor-pointer"
+           ondragover="event.preventDefault(); this.classList.add('border-violet-500','bg-violet-50')"
+           ondragleave="this.classList.remove('border-violet-500','bg-violet-50')"
+           ondrop="handleFileDrop(event)"
+           onclick="document.getElementById('file-input').click()">
+        <input type="file" id="file-input" class="hidden" accept=".shp,.geojson,.json,.gpkg,.parquet,.fgb,.kml,.csv,.dbf,.shx,.prj" multiple onchange="handleFileSelect(event)">
+        <svg class="w-10 h-10 mx-auto mb-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+        <div class="text-gray-600 font-medium">Drag & drop your geo files here</div>
+        <div class="text-sm text-gray-400 mt-1">or click to browse — Shapefile, GeoJSON, GeoPackage, GeoParquet, FlatGeobuf, KML, CSV</div>
+      </div>
+
+      <!-- Upload form (appears after file is selected) -->
+      <div id="upload-form" class="hidden bg-white rounded-xl border border-gray-200 p-5 mb-6 fade-in">
+        <h3 class="font-semibold text-gray-900 mb-3">Register New Source</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Source Name</label>
+            <input id="upload-name" type="text" placeholder="e.g. my_boundaries" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-violet-300 focus:border-violet-400 outline-none">
+            <div class="text-xs text-gray-400 mt-1">Use snake_case, no spaces. This is how you'll reference it in SQL.</div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">File</label>
+            <div id="upload-filename" class="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">No file selected</div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Coordinate System (CRS)</label>
+            <select id="upload-crs" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <option value="EPSG:4326">EPSG:4326 — WGS84 (most common, lat/lon)</option>
+              <option value="EPSG:3857">EPSG:3857 — Web Mercator (Google Maps style)</option>
+              <option value="EPSG:32617">EPSG:32617 — UTM Zone 17N (Florida/Southeast US)</option>
+              <option value="EPSG:2236">EPSG:2236 — Florida East (State Plane)</option>
+            </select>
+            <div class="text-xs text-gray-400 mt-1">If you're not sure, EPSG:4326 is almost always correct.</div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+            <input id="upload-desc" type="text" placeholder="e.g. County boundaries for Florida" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-violet-300 focus:border-violet-400 outline-none">
+          </div>
+        </div>
+        <div class="flex gap-3 mt-4">
+          <button onclick="submitUpload()" class="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition text-sm font-medium">Upload & Register Source</button>
+          <button onclick="cancelUpload()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Source cards -->
       <div id="sources-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <div class="text-gray-400">Loading sources...</div>
       </div>
@@ -140,8 +194,52 @@
     <div id="panel-models" class="hidden fade-in">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold text-gray-900">SQL Models</h2>
-        <button onclick="showNewModelForm()" class="px-3 py-1.5 bg-violet-100 text-violet-700 rounded-lg hover:bg-violet-200 transition text-sm font-medium">+ New Model</button>
+        <button onclick="toggleNewModelForm()" id="btn-new-model" class="px-3 py-1.5 bg-violet-100 text-violet-700 rounded-lg hover:bg-violet-200 transition text-sm font-medium">+ New Model</button>
       </div>
+
+      <!-- New model form -->
+      <div id="new-model-form" class="hidden bg-white rounded-xl border border-violet-200 p-5 mb-6 fade-in">
+        <h3 class="font-semibold text-gray-900 mb-3">Create a New Model</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Model Name</label>
+            <input id="new-model-name" type="text" placeholder="e.g. filtered_cities" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-violet-300 outline-none">
+            <div class="text-xs text-gray-400 mt-1">snake_case, no spaces. Creates models/name.sql</div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Output Format</label>
+            <select id="new-model-format" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <option value="geoparquet">GeoParquet (recommended)</option>
+              <option value="geojson">GeoJSON (viewable in QGIS/web)</option>
+              <option value="csv">CSV (no geometry)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Start From Template</label>
+            <select id="new-model-template" onchange="applyTemplate()" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <option value="blank">Blank</option>
+              <option value="filter">Filter rows</option>
+              <option value="spatial_join">Spatial join (point in polygon)</option>
+              <option value="buffer">Buffer geometry</option>
+              <option value="centroid">Calculate centroids</option>
+              <option value="aggregate">Aggregate by region</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">SQL</label>
+          <textarea id="new-model-sql" class="sql-editor w-full" rows="10" spellcheck="false">-- description: My new model
+-- output_format: geoparquet
+
+SELECT *
+FROM {{ source('your_source_name') }}</textarea>
+        </div>
+        <div class="flex gap-3 mt-4">
+          <button onclick="createModel()" class="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition text-sm font-medium">Create Model</button>
+          <button onclick="toggleNewModelForm()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm">Cancel</button>
+        </div>
+      </div>
+
       <div id="models-list" class="space-y-4">
         <div class="text-gray-400">Loading models...</div>
       </div>
@@ -184,6 +282,38 @@
         <div id="run-logs" class="space-y-2 text-sm font-mono">
           <div class="text-gray-400">Click "Run Pipeline" to see output here.</div>
         </div>
+      </div>
+
+      <!-- Test builder -->
+      <div class="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+        <h3 class="font-semibold text-gray-700 mb-3">Test Builder — Add Quality Checks</h3>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
+          <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Test Name</label>
+            <input id="test-name" type="text" placeholder="e.g. cities_valid" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Model to Test</label>
+            <select id="test-model" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <option value="">Select model...</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Test Type</label>
+            <select id="test-type" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <option value="row_count_positive">Has rows (not empty)</option>
+              <option value="geometry_is_valid">Valid geometry</option>
+              <option value="geometry_not_null">No NULL geometry</option>
+              <option value="geometry_not_empty">No empty geometry</option>
+              <option value="bounds_check">Within lat/lon bounds</option>
+              <option value="no_duplicate_geometries">No duplicate geometries</option>
+            </select>
+          </div>
+          <div class="flex items-end">
+            <button onclick="addTest()" class="w-full px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition text-sm font-medium">Add Test</button>
+          </div>
+        </div>
+        <div id="test-queue" class="space-y-2 text-sm"></div>
       </div>
 
       <!-- Test results -->
@@ -270,29 +400,97 @@ function renderAll() {
 function renderSources() {
   const container = document.getElementById('sources-list');
   if (sourcesData.length === 0) {
-    container.innerHTML = '<div class="text-gray-400 col-span-3">No sources defined. Add source definitions to sources/*.yml</div>';
+    container.innerHTML = '<div class="text-gray-400 col-span-3">No sources yet. Drag & drop a file above to get started.</div>';
     return;
   }
   container.innerHTML = sourcesData.map(s => `
     <div class="source-card bg-white rounded-xl border border-gray-200 p-5">
-      <div class="flex items-center gap-2 mb-2">
-        <div class="w-2 h-2 rounded-full bg-blue-500"></div>
-        <h3 class="font-semibold text-gray-900">${s.name}</h3>
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+          <h3 class="font-semibold text-gray-900">${s.name}</h3>
+        </div>
+        <button onclick="deleteSource('${s.name}')" class="text-gray-300 hover:text-red-500 transition" title="Delete source">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </button>
       </div>
       <div class="text-sm text-gray-500 space-y-1">
         <div><span class="text-gray-400">Format:</span> ${s.format}</div>
         <div><span class="text-gray-400">CRS:</span> ${s.crs || 'auto'}</div>
-        <div class="truncate"><span class="text-gray-400">Path:</span> ${s.path.split('/').pop()}</div>
+        <div class="truncate"><span class="text-gray-400">File:</span> ${s.path.split('/').pop()}</div>
         ${s.description ? `<div class="mt-2 text-gray-600">${s.description}</div>` : ''}
       </div>
     </div>
   `).join('');
 }
 
+// File upload handling
+let pendingFile = null;
+
+function handleFileDrop(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('border-violet-500','bg-violet-50');
+  const file = e.dataTransfer.files[0];
+  if (file) prepareUpload(file);
+}
+
+function handleFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) prepareUpload(file);
+}
+
+function prepareUpload(file) {
+  pendingFile = file;
+  document.getElementById('upload-form').classList.remove('hidden');
+  document.getElementById('upload-filename').textContent = file.name;
+  // Auto-generate a name from filename
+  const baseName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+  document.getElementById('upload-name').value = baseName;
+}
+
+function cancelUpload() {
+  pendingFile = null;
+  document.getElementById('upload-form').classList.add('hidden');
+  document.getElementById('file-input').value = '';
+}
+
+async function submitUpload() {
+  if (!pendingFile) return;
+  const name = document.getElementById('upload-name').value.trim();
+  if (!name) { showToast('Please enter a source name', true); return; }
+
+  const formData = new FormData();
+  formData.append('file', pendingFile);
+  formData.append('name', name);
+  formData.append('crs', document.getElementById('upload-crs').value);
+  formData.append('description', document.getElementById('upload-desc').value);
+
+  try {
+    const resp = await fetch('/api/sources/upload', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (data.success) {
+      showToast(`Source "${name}" created from ${data.file}`);
+      cancelUpload();
+      loadAll();
+    } else {
+      showToast('Upload failed: ' + (data.error || 'Unknown error'), true);
+    }
+  } catch (e) {
+    showToast('Upload failed: ' + e.message, true);
+  }
+}
+
+async function deleteSource(name) {
+  if (!confirm(`Delete source "${name}"?`)) return;
+  await fetch(`/api/sources/${name}`, { method: 'DELETE' });
+  showToast(`Source "${name}" deleted`);
+  loadAll();
+}
+
 function renderModels() {
   const container = document.getElementById('models-list');
   if (modelsData.length === 0) {
-    container.innerHTML = '<div class="text-gray-400">No models found. Create SQL files in models/</div>';
+    container.innerHTML = '<div class="text-gray-400">No models yet. Click <strong>+ New Model</strong> above to create your first transform.</div>';
     return;
   }
   container.innerHTML = modelsData.map(m => `
@@ -306,6 +504,7 @@ function renderModels() {
         <div class="flex items-center gap-2">
           <button onclick="saveModel('${m.name}')" class="px-3 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition text-xs font-medium">Save</button>
           <button onclick="previewModel('${m.name}')" class="px-3 py-1 bg-violet-100 text-violet-700 rounded hover:bg-violet-200 transition text-xs font-medium">Preview on Map</button>
+          <button onclick="deleteModel('${m.name}')" class="px-3 py-1 bg-red-50 text-red-600 rounded hover:bg-red-100 transition text-xs font-medium">Delete</button>
         </div>
       </div>
       ${m.description ? `<p class="text-sm text-gray-500 mb-3">${m.description}</p>` : ''}
@@ -316,21 +515,125 @@ function renderModels() {
       <textarea id="editor-${m.name}" class="sql-editor w-full" spellcheck="false">${escapeHtml(m.sql)}</textarea>
     </div>
   `).join('');
+
+  // Update test builder model dropdown
+  const testModel = document.getElementById('test-model');
+  if (testModel) {
+    testModel.innerHTML = '<option value="">Select model...</option>' +
+      modelsData.map(m => `<option value="${m.name}">${m.name}</option>`).join('');
+  }
 }
 
-function showNewModelForm() {
-  const name = prompt('Model name (no spaces, no .sql extension):');
-  if (!name) return;
-  const sql = `-- description: New model\n-- output_format: geoparquet\n\nSELECT *\nFROM {{ source('your_source') }}`;
-  modelsData.push({
-    name: name,
-    sql: sql,
-    output_format: 'geoparquet',
-    description: 'New model',
-    ref_dependencies: [],
-    source_dependencies: [],
-  });
-  renderModels();
+async function deleteModel(name) {
+  if (!confirm(`Delete model "${name}"?`)) return;
+  await fetch(`/api/models/${name}`, { method: 'DELETE' });
+  showToast(`Model "${name}" deleted`);
+  loadAll();
+}
+
+// Test builder
+let pendingTests = [];
+
+function addTest() {
+  const name = document.getElementById('test-name').value.trim();
+  const model = document.getElementById('test-model').value;
+  const type = document.getElementById('test-type').value;
+  if (!name || !model) { showToast('Fill in test name and model', true); return; }
+
+  pendingTests.push({ name, model, test: type });
+  renderTestQueue();
+  document.getElementById('test-name').value = '';
+
+  // Auto-save
+  saveTestsToFile();
+}
+
+function removeTest(idx) {
+  pendingTests.splice(idx, 1);
+  renderTestQueue();
+  saveTestsToFile();
+}
+
+function renderTestQueue() {
+  const container = document.getElementById('test-queue');
+  if (pendingTests.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+  container.innerHTML = pendingTests.map((t, i) => `
+    <div class="flex items-center justify-between p-2 bg-gray-50 rounded">
+      <div><span class="font-medium">${t.name}</span> <span class="text-gray-400">on</span> ${t.model} <span class="text-gray-400">&middot;</span> <span class="text-gray-500">${t.test}</span></div>
+      <button onclick="removeTest(${i})" class="text-gray-400 hover:text-red-500 text-xs">remove</button>
+    </div>
+  `).join('');
+}
+
+async function saveTestsToFile() {
+  if (pendingTests.length === 0) return;
+  try {
+    await fetch('/api/tests/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: 'tests', tests: pendingTests }),
+    });
+  } catch (e) { /* silent */ }
+}
+
+async function loadExistingTests() {
+  try {
+    const resp = await fetch('/api/tests');
+    const tests = await resp.json();
+    if (tests.length > 0) {
+      pendingTests = tests;
+      renderTestQueue();
+    }
+  } catch (e) { /* silent */ }
+}
+
+const TEMPLATES = {
+  blank: `-- description: My new model\n-- output_format: geoparquet\n\nSELECT *\nFROM {{ source('your_source_name') }}`,
+  filter: `-- description: Filtered data\n-- output_format: geoparquet\n\nSELECT\n    name,\n    population,\n    geometry\nFROM {{ source('your_source_name') }}\nWHERE population > 100000\nORDER BY population DESC`,
+  spatial_join: `-- description: Spatial join — points matched to polygons\n-- output_format: geoparquet\n\nSELECT\n    points.name AS point_name,\n    polygons.region_name,\n    points.geometry\nFROM {{ source('your_points') }} points\nJOIN {{ source('your_polygons') }} polygons\n    ON ST_Within(points.geometry, polygons.geometry)`,
+  buffer: `-- description: Buffer zones around features\n-- output_format: geojson\n\nSELECT\n    name,\n    ST_Buffer(geometry, 0.1) AS geometry\nFROM {{ source('your_source_name') }}`,
+  centroid: `-- description: Centroids of polygons\n-- output_format: geoparquet\n\nSELECT\n    name,\n    ST_Centroid(geometry) AS geometry\nFROM {{ source('your_source_name') }}`,
+  aggregate: `-- description: Aggregated stats by region\n-- output_format: geoparquet\n\nSELECT\n    region_name,\n    COUNT(*) AS feature_count,\n    SUM(population) AS total_pop,\n    ST_Union(geometry) AS geometry\nFROM {{ source('your_source_name') }}\nGROUP BY region_name`,
+};
+
+function toggleNewModelForm() {
+  const form = document.getElementById('new-model-form');
+  form.classList.toggle('hidden');
+}
+
+function applyTemplate() {
+  const tpl = document.getElementById('new-model-template').value;
+  const fmt = document.getElementById('new-model-format').value;
+  let sql = TEMPLATES[tpl] || TEMPLATES.blank;
+  sql = sql.replace(/output_format: \w+/, 'output_format: ' + fmt);
+  document.getElementById('new-model-sql').value = sql;
+}
+
+async function createModel() {
+  const name = document.getElementById('new-model-name').value.trim();
+  if (!name) { showToast('Please enter a model name', true); return; }
+  if (!/^[a-z][a-z0-9_]*$/.test(name)) { showToast('Name must be lowercase letters, numbers, underscores', true); return; }
+
+  const sql = document.getElementById('new-model-sql').value;
+  try {
+    const resp = await fetch('/api/models/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, sql }),
+    });
+    const data = await resp.json();
+    if (data.success) {
+      showToast(`Model "${name}" created`);
+      toggleNewModelForm();
+      document.getElementById('new-model-name').value = '';
+      loadAll();
+    }
+  } catch (e) {
+    showToast('Failed: ' + e.message, true);
+  }
 }
 
 async function saveModel(name) {
@@ -576,6 +879,7 @@ function escapeHtml(text) {
 
 // Init
 loadAll();
+loadExistingTests();
 </script>
 </body>
 </html>
