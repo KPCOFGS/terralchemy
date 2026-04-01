@@ -57,17 +57,20 @@ async def get_project():
 
 @app.get("/api/sources")
 async def get_sources():
-    sources = load_sources(_project_dir / _config.sources_path, _project_dir)
-    return [
-        {
-            "name": s.name,
-            "path": s.path,
-            "format": s.format,
-            "crs": s.crs,
-            "description": s.description,
-        }
-        for s in sources.values()
-    ]
+    try:
+        sources = load_sources(_project_dir / _config.sources_path, _project_dir)
+        return [
+            {
+                "name": s.name,
+                "path": s.path,
+                "format": s.format,
+                "crs": s.crs,
+                "description": s.description,
+            }
+            for s in sources.values()
+        ]
+    except Exception as e:
+        return []
 
 
 @app.post("/api/sources/upload")
@@ -170,20 +173,23 @@ async def delete_source(name: str):
 
 @app.get("/api/models")
 async def get_models():
-    models = load_models(_project_dir / _config.models_path)
-    return [
-        {
-            "name": m.name,
-            "sql_path": str(m.sql_path),
-            "sql": m.raw_sql,
-            "output_format": m.output_format,
-            "crs": m.crs,
-            "description": m.description,
-            "ref_dependencies": m.ref_dependencies,
-            "source_dependencies": m.source_dependencies,
-        }
-        for m in models.values()
-    ]
+    try:
+        models = load_models(_project_dir / _config.models_path)
+        return [
+            {
+                "name": m.name,
+                "sql_path": str(m.sql_path),
+                "sql": m.raw_sql,
+                "output_format": m.output_format,
+                "crs": m.crs,
+                "description": m.description,
+                "ref_dependencies": m.ref_dependencies,
+                "source_dependencies": m.source_dependencies,
+            }
+            for m in models.values()
+        ]
+    except Exception as e:
+        return []
 
 
 class SaveModelRequest(BaseModel):
@@ -240,25 +246,28 @@ async def save_tests(req: SaveTestsRequest):
 
 @app.get("/api/dag")
 async def get_dag():
-    sources = load_sources(_project_dir / _config.sources_path, _project_dir)
-    models = load_models(_project_dir / _config.models_path)
-    dag = build_dag(models, sources)
-    order = get_execution_order(dag)
+    try:
+        sources = load_sources(_project_dir / _config.sources_path, _project_dir)
+        models = load_models(_project_dir / _config.models_path)
+        dag = build_dag(models, sources)
+        order = get_execution_order(dag)
 
-    nodes = []
-    edges = []
+        nodes = []
+        edges = []
 
-    for node_id in dag.nodes:
-        data = dag.nodes[node_id]
-        node = {"id": node_id, "label": data["name"], "type": data["type"]}
-        if data["type"] == "model" and data["name"] in models:
-            node["output_format"] = models[data["name"]].output_format
-        nodes.append(node)
+        for node_id in dag.nodes:
+            data = dag.nodes[node_id]
+            node = {"id": node_id, "label": data["name"], "type": data["type"]}
+            if data["type"] == "model" and data["name"] in models:
+                node["output_format"] = models[data["name"]].output_format
+            nodes.append(node)
 
-    for u, v in dag.edges:
-        edges.append({"from": u, "to": v})
+        for u, v in dag.edges:
+            edges.append({"from": u, "to": v})
 
-    return {"nodes": nodes, "edges": edges, "execution_order": order}
+        return {"nodes": nodes, "edges": edges, "execution_order": order}
+    except Exception as e:
+        return {"nodes": [], "edges": [], "execution_order": [], "error": str(e)}
 
 
 # ── Run / Test ───────────────────────────────────────────────────────

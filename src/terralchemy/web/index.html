@@ -228,11 +228,7 @@
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">SQL</label>
-          <textarea id="new-model-sql" class="sql-editor w-full" rows="10" spellcheck="false">-- description: My new model
--- output_format: geoparquet
-
-SELECT *
-FROM {{ source('your_source_name') }}</textarea>
+          <textarea id="new-model-sql" class="sql-editor w-full" rows="10" spellcheck="false">-- Select a template above to get started</textarea>
         </div>
         <div class="flex gap-3 mt-4">
           <button onclick="createModel()" class="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition text-sm font-medium">Create Model</button>
@@ -352,15 +348,18 @@ function switchTab(tab) {
 async function loadAll() {
   try {
     const [proj, sources, models, dag] = await Promise.all([
-      fetch('/api/project').then(r => r.json()),
-      fetch('/api/sources').then(r => r.json()),
-      fetch('/api/models').then(r => r.json()),
-      fetch('/api/dag').then(r => r.json()),
+      fetch('/api/project').then(r => r.ok ? r.json() : {}),
+      fetch('/api/sources').then(r => r.ok ? r.json() : []),
+      fetch('/api/models').then(r => r.ok ? r.json() : []),
+      fetch('/api/dag').then(r => r.ok ? r.json() : {nodes:[], edges:[], execution_order:[]}),
     ]);
     projectData = proj;
-    sourcesData = sources;
-    modelsData = models;
-    dagData = dag;
+    sourcesData = Array.isArray(sources) ? sources : [];
+    modelsData = Array.isArray(models) ? models : [];
+    dagData = dag && dag.nodes ? dag : {nodes:[], edges:[], execution_order:[]};
+    if (dagData.error) {
+      console.warn('DAG warning:', dagData.error);
+    }
     renderAll();
   } catch (e) {
     console.error('Load failed:', e);
@@ -590,24 +589,41 @@ async function loadExistingTests() {
   } catch (e) { /* silent */ }
 }
 
-const TEMPLATES = {
-  blank: `-- description: My new model\n-- output_format: geoparquet\n\nSELECT *\nFROM {{ source('your_source_name') }}`,
-  filter: `-- description: Filtered data\n-- output_format: geoparquet\n\nSELECT\n    name,\n    population,\n    geometry\nFROM {{ source('your_source_name') }}\nWHERE population > 100000\nORDER BY population DESC`,
-  spatial_join: `-- description: Spatial join — points matched to polygons\n-- output_format: geoparquet\n\nSELECT\n    points.name AS point_name,\n    polygons.region_name,\n    points.geometry\nFROM {{ source('your_points') }} points\nJOIN {{ source('your_polygons') }} polygons\n    ON ST_Within(points.geometry, polygons.geometry)`,
-  buffer: `-- description: Buffer zones around features\n-- output_format: geojson\n\nSELECT\n    name,\n    ST_Buffer(geometry, 0.1) AS geometry\nFROM {{ source('your_source_name') }}`,
-  centroid: `-- description: Centroids of polygons\n-- output_format: geoparquet\n\nSELECT\n    name,\n    ST_Centroid(geometry) AS geometry\nFROM {{ source('your_source_name') }}`,
-  aggregate: `-- description: Aggregated stats by region\n-- output_format: geoparquet\n\nSELECT\n    region_name,\n    COUNT(*) AS feature_count,\n    SUM(population) AS total_pop,\n    ST_Union(geometry) AS geometry\nFROM {{ source('your_source_name') }}\nGROUP BY region_name`,
-};
+function getFirstSourceName() {
+  return sourcesData.length > 0 ? sourcesData[0].name : 'YOUR_SOURCE';
+}
+
+function getSecondSourceName() {
+  return sourcesData.length > 1 ? sourcesData[1].name : (sourcesData.length > 0 ? sourcesData[0].name : 'YOUR_SOURCE_2');
+}
+
+function buildTemplates() {
+  const s1 = getFirstSourceName();
+  const s2 = getSecondSourceName();
+  return {
+    blank: `-- description: My new model\n-- output_format: geoparquet\n\nSELECT *\nFROM {{ source('${s1}') }}`,
+    filter: `-- description: Filtered data\n-- output_format: geoparquet\n\nSELECT\n    *\nFROM {{ source('${s1}') }}\nWHERE population > 100000\nORDER BY population DESC`,
+    spatial_join: `-- description: Spatial join — points matched to polygons\n-- output_format: geoparquet\n\nSELECT\n    a.*,\n    b.name AS joined_name\nFROM {{ source('${s1}') }} a\nJOIN {{ source('${s2}') }} b\n    ON ST_Within(a.geometry, b.geometry)`,
+    buffer: `-- description: Buffer zones around features\n-- output_format: geojson\n\nSELECT\n    *,\n    ST_Buffer(geometry, 0.1) AS buffered_geometry\nFROM {{ source('${s1}') }}`,
+    centroid: `-- description: Centroids of polygons\n-- output_format: geoparquet\n\nSELECT\n    *,\n    ST_Centroid(geometry) AS centroid_geometry\nFROM {{ source('${s1}') }}`,
+    aggregate: `-- description: Aggregated stats by region\n-- output_format: geoparquet\n\nSELECT\n    name,\n    COUNT(*) AS feature_count,\n    ST_Union(geometry) AS geometry\nFROM {{ source('${s1}') }}\nGROUP BY name`,
+  };
+}
 
 function toggleNewModelForm() {
   const form = document.getElementById('new-model-form');
   form.classList.toggle('hidden');
+  if (!form.classList.contains('hidden')) {
+    // Pre-fill with current sources
+    applyTemplate();
+  }
 }
 
 function applyTemplate() {
   const tpl = document.getElementById('new-model-template').value;
   const fmt = document.getElementById('new-model-format').value;
-  let sql = TEMPLATES[tpl] || TEMPLATES.blank;
+  const templates = buildTemplates();
+  let sql = templates[tpl] || templates.blank;
   sql = sql.replace(/output_format: \w+/, 'output_format: ' + fmt);
   document.getElementById('new-model-sql').value = sql;
 }
