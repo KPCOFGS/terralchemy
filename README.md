@@ -32,21 +32,49 @@ sources/             models/                    target/
 
 ## Installation
 
-```bash
-# Install from GitHub (with web dashboard)
-pip install "terralchemy[ui] @ git+https://github.com/KPCOFGS/terralchemy.git"
+Pick whichever method matches your setup. You only need one.
 
-# Or clone and install locally
-git clone https://github.com/KPCOFGS/terralchemy.git
-cd terralchemy
-pip install -e ".[ui]"
+**Option A — uv (recommended, fastest)**
+
+If you have [uv](https://docs.astral.sh/uv/) installed:
+
+```bash
+uv tool install "terralchemy[ui] @ git+https://github.com/KPCOFGS/terralchemy.git"
 ```
 
-> The `[ui]` extra installs the web dashboard. If you only want the CLI, drop it: `pip install git+https://...`
+This installs `terralchemy` globally — you can run it from anywhere, no venv needed.
+
+**Option B — pip with a virtual environment**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install "terralchemy[ui] @ git+https://github.com/KPCOFGS/terralchemy.git"
+```
+
+> Make sure your venv is activated (`source .venv/bin/activate`) every time you open a new terminal, otherwise `terralchemy` won't be found.
+
+**Option C — clone and install for development**
+
+```bash
+git clone https://github.com/KPCOFGS/terralchemy.git
+cd terralchemy
+uv venv .venv && source .venv/bin/activate
+uv pip install -e ".[ui]"
+```
+
+**Verify it worked:**
+
+```bash
+terralchemy version
+# Should print: terralchemy v0.1.0
+```
+
+> The `[ui]` extra installs the web dashboard. If you only want the CLI, leave it off.
 
 ## Web Dashboard
 
-**Don't want to use the terminal? You don't have to.** After the initial setup (two commands), everything else happens in the browser.
+**Don't want to use the terminal? You don't have to.** After these three commands, everything else happens in the browser:
 
 ```bash
 terralchemy init my_project
