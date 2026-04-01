@@ -218,6 +218,182 @@ async def delete_model(name: str):
     return {"success": False, "error": "Model not found"}
 
 
+@app.get("/api/sources/{name}/columns")
+async def get_source_columns(name: str):
+    """Return column names and types for a source (for the visual builder)."""
+    try:
+        sources = load_sources(_project_dir / _config.sources_path, _project_dir)
+        if name not in sources:
+            return {"columns": [], "error": f"Source '{name}' not found"}
+
+        source = sources[name]
+        db_path = ":memory:"
+        with SpatialEngine(db_path) as engine:
+            engine.load_source(name, source.path, source.crs)
+            col_info = engine.query(f"DESCRIBE __source__{name}")
+            columns = []
+            for row in col_info:
+                col_name, col_type = row[0], row[1]
+                # Classify type for the UI
+                t = col_type.upper().split("(")[0].strip()
+                geom_types = {"GEOMETRY", "BLOB", "WKB_BLOB", "POINT", "LINESTRING",
+                              "POLYGON", "MULTIPOINT", "MULTILINESTRING", "MULTIPOLYGON"}
+                if t in geom_types:
+                    kind = "geometry"
+                elif t in ("INTEGER", "BIGINT", "SMALLINT", "TINYINT", "FLOAT", "DOUBLE", "DECIMAL", "HUGEINT"):
+                    kind = "number"
+                else:
+                    kind = "text"
+                columns.append({"name": col_name, "type": col_type, "kind": kind})
+            return {"columns": columns}
+    except Exception as e:
+        return {"columns": [], "error": str(e)}
+
+
+class BuildModelRequest(BaseModel):
+    name: str
+    source: str
+    operations: list[dict]
+    output_format: str = "geoparquet"
+    description: str = ""
+
+
+@app.post("/api/models/build")
+async def build_model(req: BuildModelRequest):
+    """Generate SQL from a visual pipeline definition and save it."""
+    try:
+        sql_parts = []
+        select_cols = ["*"]
+        from_clause = f"{{{{ source('{req.source}') }}}}"
+        where_clauses = []
+        group_by = None
+        join_clause = None
+        order_by = None
+
+        # Track column replacements for geometry operations
+        extra_selects = []
+        replace_geometry = None
+
+        for op in req.operations:
+            op_type = op.get("type")
+
+            if op_type == "filter":
+                col = op["column"]
+                condition = op["condition"]
+                value = op["value"]
+                # Try to detect if value is numeric
+                try:
+                    float(value)
+                    val_str = value
+                except (ValueError, TypeError):
+                    val_str = f"'{value}'"
+
+                cond_map = {
+                    "equals": f"{col} = {val_str}",
+                    "not_equals": f"{col} != {val_str}",
+                    "greater_than": f"{col} > {val_str}",
+                    "less_than": f"{col} < {val_str}",
+                    "greater_equal": f"{col} >= {val_str}",
+                    "less_equal": f"{col} <= {val_str}",
+                    "contains": f"{col} LIKE '%{value}%'",
+                    "starts_with": f"{col} LIKE '{value}%'",
+                }
+                where_clauses.append(cond_map.get(condition, f"{col} = {val_str}"))
+
+            elif op_type == "buffer":
+                distance = op.get("distance", 0.1)
+                replace_geometry = f"ST_Buffer(geometry, {distance}) AS geometry"
+
+            elif op_type == "centroid":
+                replace_geometry = "ST_Centroid(geometry) AS geometry"
+
+            elif op_type == "area":
+                extra_selects.append("ST_Area(geometry) AS area")
+
+            elif op_type == "length":
+                extra_selects.append("ST_Length(geometry) AS length")
+
+            elif op_type == "spatial_join":
+                join_source = op.get("join_source", "")
+                join_type = op.get("join_type", "within")
+                join_map = {
+                    "within": "ST_Within(a.geometry, b.geometry)",
+                    "intersects": "ST_Intersects(a.geometry, b.geometry)",
+                    "contains": "ST_Contains(a.geometry, b.geometry)",
+                }
+                join_cond = join_map.get(join_type, join_map["within"])
+                from_clause = f"{{{{ source('{req.source}') }}}} a"
+                join_clause = f"JOIN {{{{ source('{join_source}') }}}} b ON {join_cond}"
+                select_cols = ["a.*"]
+
+            elif op_type == "select_columns":
+                cols = op.get("columns", [])
+                if cols:
+                    # Always keep geometry
+                    if "geometry" not in cols:
+                        cols.append("geometry")
+                    select_cols = cols
+
+            elif op_type == "aggregate":
+                group_col = op.get("group_by", "")
+                agg_col = op.get("agg_column", "")
+                agg_func = op.get("agg_function", "count")
+                func_map = {
+                    "count": f"COUNT(*) AS count",
+                    "sum": f"SUM({agg_col}) AS total_{agg_col}" if agg_col else "COUNT(*) AS count",
+                    "avg": f"AVG({agg_col}) AS avg_{agg_col}" if agg_col else "COUNT(*) AS count",
+                    "min": f"MIN({agg_col}) AS min_{agg_col}" if agg_col else "COUNT(*) AS count",
+                    "max": f"MAX({agg_col}) AS max_{agg_col}" if agg_col else "COUNT(*) AS count",
+                }
+                select_cols = [group_col, func_map.get(agg_func, "COUNT(*) AS count"),
+                               "ST_Union(geometry) AS geometry"]
+                group_by = group_col
+
+            elif op_type == "sort":
+                sort_col = op.get("column", "")
+                sort_dir = op.get("direction", "DESC")
+                if sort_col:
+                    order_by = f"{sort_col} {sort_dir}"
+
+        # Build the SELECT columns
+        if replace_geometry:
+            # Replace geometry in select list
+            if select_cols == ["*"]:
+                # Need to enumerate non-geom columns + the replacement
+                cols_str = f"* REPLACE({replace_geometry})"
+            else:
+                cols_str = ", ".join(c if c != "geometry" else replace_geometry for c in select_cols)
+        else:
+            cols_str = ", ".join(select_cols)
+
+        if extra_selects:
+            cols_str += ",\n    " + ",\n    ".join(extra_selects)
+
+        # Assemble SQL
+        sql = f"-- description: {req.description}\n-- output_format: {req.output_format}\n\n"
+        sql += f"SELECT\n    {cols_str}\nFROM {from_clause}"
+
+        if join_clause:
+            sql += f"\n{join_clause}"
+        if where_clauses:
+            sql += f"\nWHERE {' AND '.join(where_clauses)}"
+        if group_by:
+            sql += f"\nGROUP BY {group_by}"
+        if order_by:
+            sql += f"\nORDER BY {order_by}"
+
+        # Save the model
+        models_dir = _project_dir / _config.models_path
+        models_dir.mkdir(exist_ok=True)
+        path = models_dir / f"{req.name}.sql"
+        path.write_text(sql + "\n")
+
+        return {"success": True, "sql": sql, "path": str(path)}
+
+    except Exception as e:
+        return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
+
+
 # ── Tests ────────────────────────────────────────────────────────────
 
 @app.get("/api/tests")

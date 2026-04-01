@@ -193,51 +193,96 @@
     <!-- Models Tab -->
     <div id="panel-models" class="hidden fade-in">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-semibold text-gray-900">SQL Models</h2>
-        <button onclick="toggleNewModelForm()" id="btn-new-model" class="px-3 py-1.5 bg-violet-100 text-violet-700 rounded-lg hover:bg-violet-200 transition text-sm font-medium">+ New Model</button>
+        <h2 class="text-lg font-semibold text-gray-900">Pipeline Builder</h2>
+        <div class="flex items-center gap-2">
+          <button onclick="toggleAdvancedSQL()" class="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition text-sm">Advanced (SQL)</button>
+        </div>
       </div>
 
-      <!-- New model form -->
-      <div id="new-model-form" class="hidden bg-white rounded-xl border border-violet-200 p-5 mb-6 fade-in">
-        <h3 class="font-semibold text-gray-900 mb-3">Create a New Model</h3>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+      <!-- Visual Pipeline Builder -->
+      <div id="visual-builder" class="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+        <!-- Step 1: Name & Source -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Model Name</label>
-            <input id="new-model-name" type="text" placeholder="e.g. filtered_cities" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-violet-300 outline-none">
-            <div class="text-xs text-gray-400 mt-1">snake_case, no spaces. Creates models/name.sql</div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Pipeline Name</label>
+            <input id="vb-name" type="text" placeholder="e.g. big_cities" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-violet-300 outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Data Source</label>
+            <select id="vb-source" onchange="onSourceChange()" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <option value="">Pick your data...</option>
+            </select>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Output Format</label>
-            <select id="new-model-format" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-              <option value="geoparquet">GeoParquet (recommended)</option>
-              <option value="geojson">GeoJSON (viewable in QGIS/web)</option>
-              <option value="csv">CSV (no geometry)</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Start From Template</label>
-            <select id="new-model-template" onchange="applyTemplate()" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-              <option value="blank">Blank</option>
-              <option value="filter">Filter rows</option>
-              <option value="spatial_join">Spatial join (point in polygon)</option>
-              <option value="buffer">Buffer geometry</option>
-              <option value="centroid">Calculate centroids</option>
-              <option value="aggregate">Aggregate by region</option>
+            <select id="vb-format" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <option value="geoparquet">GeoParquet (recommended for large data)</option>
+              <option value="geojson">GeoJSON (open in QGIS, web maps, etc.)</option>
+              <option value="csv">CSV (spreadsheet, no map geometry)</option>
             </select>
           </div>
         </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">SQL</label>
-          <textarea id="new-model-sql" class="sql-editor w-full" rows="10" spellcheck="false">-- Select a template above to get started</textarea>
+
+        <!-- Step 2: Operations -->
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-2">Operations — what do you want to do with the data?</label>
+          <div id="vb-operations" class="space-y-3"></div>
+          <div class="flex flex-wrap gap-2 mt-3">
+            <button onclick="addOp('filter')" class="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm hover:bg-blue-100 transition">+ Filter rows</button>
+            <button onclick="addOp('buffer')" class="px-3 py-1.5 bg-green-50 text-green-700 border border-green-200 rounded-lg text-sm hover:bg-green-100 transition">+ Buffer (expand area)</button>
+            <button onclick="addOp('centroid')" class="px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-sm hover:bg-amber-100 transition">+ Centroid (center point)</button>
+            <button onclick="addOp('spatial_join')" class="px-3 py-1.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-sm hover:bg-purple-100 transition">+ Spatial join</button>
+            <button onclick="addOp('area')" class="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg text-sm hover:bg-rose-100 transition">+ Calculate area</button>
+            <button onclick="addOp('aggregate')" class="px-3 py-1.5 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded-lg text-sm hover:bg-cyan-100 transition">+ Aggregate / Group</button>
+            <button onclick="addOp('sort')" class="px-3 py-1.5 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-sm hover:bg-gray-100 transition">+ Sort</button>
+          </div>
         </div>
-        <div class="flex gap-3 mt-4">
-          <button onclick="createModel()" class="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition text-sm font-medium">Create Model</button>
-          <button onclick="toggleNewModelForm()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm">Cancel</button>
+
+        <!-- Step 3: Description -->
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+          <input id="vb-description" type="text" placeholder="e.g. Cities with population over 300k, buffered by 10km" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+        </div>
+
+        <!-- Actions -->
+        <div class="flex items-center gap-3">
+          <button onclick="buildAndSave()" class="px-5 py-2.5 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition font-medium text-sm">Create Pipeline</button>
+          <button onclick="buildAndRun()" class="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition font-medium text-sm">Create & Run</button>
+          <span id="vb-status" class="text-sm text-gray-400"></span>
         </div>
       </div>
 
+      <!-- Advanced SQL mode (hidden by default) -->
+      <div id="advanced-sql" class="hidden mb-6">
+        <div class="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+          <h3 class="font-semibold text-gray-900 mb-3">Advanced: Write SQL Directly</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Model Name</label>
+              <input id="adv-name" type="text" placeholder="model_name" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Output Format</label>
+              <select id="adv-format" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <option value="geoparquet">GeoParquet</option>
+                <option value="geojson">GeoJSON</option>
+                <option value="csv">CSV</option>
+              </select>
+            </div>
+          </div>
+          <textarea id="adv-sql" class="sql-editor w-full" rows="8" spellcheck="false">-- Write your SQL here
+SELECT *
+FROM {{ source('your_source') }}</textarea>
+          <div class="flex gap-3 mt-3">
+            <button onclick="saveAdvancedModel()" class="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition text-sm font-medium">Save Model</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Existing models list -->
+      <h3 class="text-md font-semibold text-gray-700 mb-3">Existing Pipelines</h3>
       <div id="models-list" class="space-y-4">
-        <div class="text-gray-400">Loading models...</div>
+        <div class="text-gray-400">Loading...</div>
       </div>
     </div>
 
@@ -384,13 +429,21 @@ function renderAll() {
   // Models
   renderModels();
 
+  // Visual builder source dropdown
+  const vbSource = document.getElementById('vb-source');
+  if (vbSource) {
+    const cur = vbSource.value;
+    vbSource.innerHTML = '<option value="">Pick your data...</option>' +
+      sourcesData.map(s => `<option value="${s.name}">${s.name}${s.description ? ' — ' + s.description : ''}</option>`).join('');
+    if (cur) vbSource.value = cur;
+  }
+
   // Map dropdown
   const select = document.getElementById('map-model-select');
   select.innerHTML = '<option value="">Select a model to preview...</option>';
   modelsData.forEach(m => {
     select.innerHTML += `<option value="${m.name}">${m.name}</option>`;
   });
-  // Also add sources
   sourcesData.forEach(s => {
     select.innerHTML += `<option value="source:${s.name}">${s.name} (source)</option>`;
   });
@@ -589,66 +642,237 @@ async function loadExistingTests() {
   } catch (e) { /* silent */ }
 }
 
-function getFirstSourceName() {
-  return sourcesData.length > 0 ? sourcesData[0].name : 'YOUR_SOURCE';
+// Visual builder state
+let vbOps = [];
+let sourceColumns = {};
+
+function toggleAdvancedSQL() {
+  document.getElementById('advanced-sql').classList.toggle('hidden');
 }
 
-function getSecondSourceName() {
-  return sourcesData.length > 1 ? sourcesData[1].name : (sourcesData.length > 0 ? sourcesData[0].name : 'YOUR_SOURCE_2');
+async function saveAdvancedModel() {
+  const name = document.getElementById('adv-name').value.trim();
+  const sql = document.getElementById('adv-sql').value;
+  if (!name) { showToast('Enter a model name', true); return; }
+  const resp = await fetch('/api/models/save', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({name, sql}),
+  });
+  const d = await resp.json();
+  if (d.success) { showToast('Model saved'); loadAll(); }
+  else showToast('Error: ' + d.error, true);
 }
 
-function buildTemplates() {
-  const s1 = getFirstSourceName();
-  const s2 = getSecondSourceName();
-  return {
-    blank: `-- description: My new model\n-- output_format: geoparquet\n\nSELECT *\nFROM {{ source('${s1}') }}`,
-    filter: `-- description: Filtered data\n-- output_format: geoparquet\n\nSELECT\n    *\nFROM {{ source('${s1}') }}\nWHERE population > 100000\nORDER BY population DESC`,
-    spatial_join: `-- description: Spatial join — points matched to polygons\n-- output_format: geoparquet\n\nSELECT\n    a.*,\n    b.name AS joined_name\nFROM {{ source('${s1}') }} a\nJOIN {{ source('${s2}') }} b\n    ON ST_Within(a.geometry, b.geometry)`,
-    buffer: `-- description: Buffer zones around features\n-- output_format: geojson\n\nSELECT\n    *,\n    ST_Buffer(geometry, 0.1) AS buffered_geometry\nFROM {{ source('${s1}') }}`,
-    centroid: `-- description: Centroids of polygons\n-- output_format: geoparquet\n\nSELECT\n    *,\n    ST_Centroid(geometry) AS centroid_geometry\nFROM {{ source('${s1}') }}`,
-    aggregate: `-- description: Aggregated stats by region\n-- output_format: geoparquet\n\nSELECT\n    name,\n    COUNT(*) AS feature_count,\n    ST_Union(geometry) AS geometry\nFROM {{ source('${s1}') }}\nGROUP BY name`,
+async function onSourceChange() {
+  const src = document.getElementById('vb-source').value;
+  if (!src || sourceColumns[src]) return;
+  try {
+    const resp = await fetch(`/api/sources/${src}/columns`);
+    const data = await resp.json();
+    sourceColumns[src] = data.columns || [];
+  } catch(e) {}
+  // Re-render ops to update column dropdowns
+  renderOps();
+}
+
+function getColOptions(kinds) {
+  const src = document.getElementById('vb-source').value;
+  const cols = sourceColumns[src] || [];
+  return cols
+    .filter(c => !kinds || kinds.includes(c.kind))
+    .map(c => `<option value="${c.name}">${c.name}</option>`)
+    .join('');
+}
+
+function getAllColOptions() { return getColOptions(null); }
+function getNumColOptions() { return getColOptions(['number']); }
+
+let opIdCounter = 0;
+function addOp(type) {
+  const id = opIdCounter++;
+  vbOps.push({id, type});
+  renderOps();
+}
+
+function removeOp(id) {
+  vbOps = vbOps.filter(o => o.id !== id);
+  renderOps();
+}
+
+function renderOps() {
+  const container = document.getElementById('vb-operations');
+  if (vbOps.length === 0) {
+    container.innerHTML = '<div class="text-sm text-gray-400 italic">No operations added yet. Click a button below to add one, or just click "Create Pipeline" to pass through all data.</div>';
+    return;
+  }
+  container.innerHTML = vbOps.map(op => {
+    const removeBtn = `<button onclick="removeOp(${op.id})" class="text-gray-400 hover:text-red-500 text-xs ml-auto">remove</button>`;
+    let inner = '';
+
+    if (op.type === 'filter') {
+      inner = `
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-sm font-medium text-blue-700 w-24">Filter rows</span>
+          <span class="text-xs text-gray-400">where</span>
+          <select data-op="${op.id}" data-field="column" onchange="syncOp(this)" class="px-2 py-1 border border-gray-300 rounded text-sm">
+            <option value="">column...</option>${getAllColOptions()}
+          </select>
+          <select data-op="${op.id}" data-field="condition" onchange="syncOp(this)" class="px-2 py-1 border border-gray-300 rounded text-sm">
+            <option value="greater_than">is greater than</option>
+            <option value="less_than">is less than</option>
+            <option value="equals">equals</option>
+            <option value="not_equals">does not equal</option>
+            <option value="greater_equal">is at least</option>
+            <option value="less_equal">is at most</option>
+            <option value="contains">contains text</option>
+            <option value="starts_with">starts with</option>
+          </select>
+          <input data-op="${op.id}" data-field="value" onchange="syncOp(this)" type="text" placeholder="value" class="px-2 py-1 border border-gray-300 rounded text-sm w-28">
+          ${removeBtn}
+        </div>`;
+    } else if (op.type === 'buffer') {
+      inner = `
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-medium text-green-700 w-24">Buffer</span>
+          <span class="text-xs text-gray-400">expand each feature by</span>
+          <input data-op="${op.id}" data-field="distance" onchange="syncOp(this)" type="number" step="0.01" value="0.1" class="px-2 py-1 border border-gray-300 rounded text-sm w-20">
+          <span class="text-xs text-gray-400">degrees (~11km at equator per 0.1)</span>
+          ${removeBtn}
+        </div>`;
+    } else if (op.type === 'centroid') {
+      inner = `
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-medium text-amber-700 w-24">Centroid</span>
+          <span class="text-xs text-gray-500">Replace each shape with its center point</span>
+          ${removeBtn}
+        </div>`;
+    } else if (op.type === 'area') {
+      inner = `
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-medium text-rose-700 w-24">Area</span>
+          <span class="text-xs text-gray-500">Add an "area" column to each feature</span>
+          ${removeBtn}
+        </div>`;
+    } else if (op.type === 'spatial_join') {
+      const srcOpts = sourcesData.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+      inner = `
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-sm font-medium text-purple-700 w-24">Spatial join</span>
+          <span class="text-xs text-gray-400">match with</span>
+          <select data-op="${op.id}" data-field="join_source" onchange="syncOp(this)" class="px-2 py-1 border border-gray-300 rounded text-sm">
+            <option value="">pick second dataset...</option>${srcOpts}
+          </select>
+          <span class="text-xs text-gray-400">where features are</span>
+          <select data-op="${op.id}" data-field="join_type" onchange="syncOp(this)" class="px-2 py-1 border border-gray-300 rounded text-sm">
+            <option value="within">inside (within)</option>
+            <option value="intersects">overlapping (intersects)</option>
+            <option value="contains">containing (contains)</option>
+          </select>
+          ${removeBtn}
+        </div>`;
+    } else if (op.type === 'aggregate') {
+      inner = `
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-sm font-medium text-cyan-700 w-24">Aggregate</span>
+          <span class="text-xs text-gray-400">group by</span>
+          <select data-op="${op.id}" data-field="group_by" onchange="syncOp(this)" class="px-2 py-1 border border-gray-300 rounded text-sm">
+            <option value="">column...</option>${getAllColOptions()}
+          </select>
+          <span class="text-xs text-gray-400">then</span>
+          <select data-op="${op.id}" data-field="agg_function" onchange="syncOp(this)" class="px-2 py-1 border border-gray-300 rounded text-sm">
+            <option value="count">Count features</option>
+            <option value="sum">Sum a column</option>
+            <option value="avg">Average a column</option>
+            <option value="min">Min of a column</option>
+            <option value="max">Max of a column</option>
+          </select>
+          <select data-op="${op.id}" data-field="agg_column" onchange="syncOp(this)" class="px-2 py-1 border border-gray-300 rounded text-sm">
+            <option value="">(column)</option>${getNumColOptions()}
+          </select>
+          ${removeBtn}
+        </div>`;
+    } else if (op.type === 'sort') {
+      inner = `
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-medium text-gray-700 w-24">Sort by</span>
+          <select data-op="${op.id}" data-field="column" onchange="syncOp(this)" class="px-2 py-1 border border-gray-300 rounded text-sm">
+            <option value="">column...</option>${getAllColOptions()}
+          </select>
+          <select data-op="${op.id}" data-field="direction" onchange="syncOp(this)" class="px-2 py-1 border border-gray-300 rounded text-sm">
+            <option value="DESC">Highest first</option>
+            <option value="ASC">Lowest first</option>
+          </select>
+          ${removeBtn}
+        </div>`;
+    }
+    return `<div class="p-3 bg-gray-50 rounded-lg border border-gray-200 fade-in">${inner}</div>`;
+  }).join('');
+}
+
+function syncOp(el) {
+  const opId = parseInt(el.dataset.op);
+  const field = el.dataset.field;
+  const op = vbOps.find(o => o.id === opId);
+  if (op) op[field] = el.value;
+}
+
+function collectOps() {
+  // Read current values from DOM into vbOps
+  document.querySelectorAll('[data-op]').forEach(el => {
+    const opId = parseInt(el.dataset.op);
+    const field = el.dataset.field;
+    const op = vbOps.find(o => o.id === opId);
+    if (op) op[field] = el.value;
+  });
+  return vbOps.map(op => {
+    const o = {type: op.type};
+    if (op.type === 'filter') { o.column = op.column||''; o.condition = op.condition||'greater_than'; o.value = op.value||''; }
+    if (op.type === 'buffer') { o.distance = parseFloat(op.distance||0.1); }
+    if (op.type === 'spatial_join') { o.join_source = op.join_source||''; o.join_type = op.join_type||'within'; }
+    if (op.type === 'aggregate') { o.group_by = op.group_by||''; o.agg_function = op.agg_function||'count'; o.agg_column = op.agg_column||''; }
+    if (op.type === 'sort') { o.column = op.column||''; o.direction = op.direction||'DESC'; }
+    return o;
+  });
+}
+
+async function buildAndSave() {
+  const name = document.getElementById('vb-name').value.trim();
+  const source = document.getElementById('vb-source').value;
+  if (!name) { showToast('Enter a pipeline name', true); return; }
+  if (!source) { showToast('Pick a data source', true); return; }
+  if (!/^[a-z][a-z0-9_]*$/.test(name)) { showToast('Name: lowercase letters, numbers, underscores only', true); return; }
+
+  const payload = {
+    name,
+    source,
+    operations: collectOps(),
+    output_format: document.getElementById('vb-format').value,
+    description: document.getElementById('vb-description').value,
   };
-}
 
-function toggleNewModelForm() {
-  const form = document.getElementById('new-model-form');
-  form.classList.toggle('hidden');
-  if (!form.classList.contains('hidden')) {
-    // Pre-fill with current sources
-    applyTemplate();
+  const resp = await fetch('/api/models/build', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(payload),
+  });
+  const data = await resp.json();
+  if (data.success) {
+    showToast(`Pipeline "${name}" created`);
+    document.getElementById('vb-status').textContent = 'Saved!';
+    vbOps = []; opIdCounter = 0; renderOps();
+    document.getElementById('vb-name').value = '';
+    document.getElementById('vb-description').value = '';
+    loadAll();
+    return true;
+  } else {
+    showToast('Error: ' + data.error, true);
+    return false;
   }
 }
 
-function applyTemplate() {
-  const tpl = document.getElementById('new-model-template').value;
-  const fmt = document.getElementById('new-model-format').value;
-  const templates = buildTemplates();
-  let sql = templates[tpl] || templates.blank;
-  sql = sql.replace(/output_format: \w+/, 'output_format: ' + fmt);
-  document.getElementById('new-model-sql').value = sql;
-}
-
-async function createModel() {
-  const name = document.getElementById('new-model-name').value.trim();
-  if (!name) { showToast('Please enter a model name', true); return; }
-  if (!/^[a-z][a-z0-9_]*$/.test(name)) { showToast('Name must be lowercase letters, numbers, underscores', true); return; }
-
-  const sql = document.getElementById('new-model-sql').value;
-  try {
-    const resp = await fetch('/api/models/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, sql }),
-    });
-    const data = await resp.json();
-    if (data.success) {
-      showToast(`Model "${name}" created`);
-      toggleNewModelForm();
-      document.getElementById('new-model-name').value = '';
-      loadAll();
-    }
-  } catch (e) {
-    showToast('Failed: ' + e.message, true);
+async function buildAndRun() {
+  const ok = await buildAndSave();
+  if (ok) {
+    await runPipeline();
   }
 }
 
