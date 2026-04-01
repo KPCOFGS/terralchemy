@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "terralchemy"
+version = "0.1.0"
+description = "Terralchemy — declarative spatial data pipelines powered by DuckDB"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Shixian Sheng" },
+]
+keywords = ["gis", "geospatial", "etl", "duckdb", "pipeline", "spatial", "dbt"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+dependencies = [
+    "duckdb>=1.0.0",
+    "typer>=0.12.0",
+    "pyyaml>=6.0",
+    "rich>=13.0.0",
+    "jinja2>=3.1.0",
+    "networkx>=3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4.0",
+]
+
+[project.scripts]
+terralchemy = "terralchemy.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/KPCOFGS/terralchemy"
+Repository = "https://github.com/KPCOFGS/terralchemy"
+Issues = "https://github.com/KPCOFGS/terralchemy/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/terralchemy"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
