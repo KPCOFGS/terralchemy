@@ -106,7 +106,7 @@ That's it. Your browser opens with the full dashboard. From there you can do eve
 
 | Overview | Sources | Models |
 |:---:|:---:|:---:|
-| ![Overview](docs/screenshots/pic_1.png) | ![Sources](docs/screenshots/pic_2.png) | ![Models](docs/screenshots/pic_3.png) |
+| ![Overview](docs/screenshots/pic_1.png) | ![Sources](docs/screenshots/pic_2.png) | ![Models](docs/screenshots/pic3.png) |
 | Dashboard with pipeline graph and quick start guide | Drag & drop file upload with auto-registration | SQL editor with save, preview, and delete |
 | **Pipeline DAG** | **Map Preview** | **Run Output & Tests** |
 | ![DAG](docs/screenshots/pic_4.png) | ![Map](docs/screenshots/pic_5.png) | ![Tests](docs/screenshots/pic_6.png) |
