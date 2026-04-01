@@ -1,0 +1,30 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {"name": "Orlando", "population": 307573, "state": "FL"},
+      "geometry": {"type": "Point", "coordinates": [-81.3789, 28.5383]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"name": "Miami", "population": 449514, "state": "FL"},
+      "geometry": {"type": "Point", "coordinates": [-80.1918, 25.7617]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"name": "Tampa", "population": 384959, "state": "FL"},
+      "geometry": {"type": "Point", "coordinates": [-82.4572, 27.9506]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"name": "Jacksonville", "population": 949611, "state": "FL"},
+      "geometry": {"type": "Point", "coordinates": [-81.6557, 30.3322]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"name": "Tallahassee", "population": 196169, "state": "FL"},
+      "geometry": {"type": "Point", "coordinates": [-84.2807, 30.4383]}
+    }
+  ]
+}
