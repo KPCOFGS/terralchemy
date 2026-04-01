@@ -8,3 +8,4 @@ build/
 *.duckdb.wal
 target/
 .ruff_cache/
+paper/
