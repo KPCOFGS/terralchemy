@@ -33,7 +33,13 @@ sources/             models/                    target/
 ## Installation
 
 ```bash
-pip install terralchemy
+# Install from GitHub
+pip install git+https://github.com/KPCOFGS/terralchemy.git
+
+# Or clone and install locally
+git clone https://github.com/KPCOFGS/terralchemy.git
+cd terralchemy
+pip install -e .
 ```
 
 ## Quickstart
