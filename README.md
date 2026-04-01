@@ -42,104 +42,286 @@ cd terralchemy
 pip install -e .
 ```
 
-## Quickstart
+## Quickstart — Full Walkthrough
 
-### 1. Initialize a project
+This walkthrough takes you from zero to a working spatial pipeline in about 5 minutes. We'll use a small GeoJSON file with Florida cities as our example data.
+
+### Step 1: Create a new project
 
 ```bash
-terralchemy init my_project
-cd my_project
+terralchemy init florida_demo
+cd florida_demo
 ```
 
-This creates:
+You'll see this folder structure get created:
 
 ```
-my_project/
-├── terralchemy_project.yml  # Project configuration
-├── sources/                 # Source definitions (YAML)
+florida_demo/
+├── terralchemy_project.yml  # Project config (you usually don't need to touch this)
+├── sources/                 # Tell terralchemy where your geo files are
 │   └── example.yml
-├── models/                  # SQL models with spatial transforms
+├── models/                  # Your SQL transforms go here (one file per transform)
 │   └── example.sql
-├── tests/                   # Spatial tests (YAML)
+├── tests/                   # Define quality checks on your output
 │   └── example.yml
-├── data/                    # Your geospatial files
-└── target/                  # Pipeline outputs
+├── data/                    # Drop your shapefiles, geojson, etc. here
+└── target/                  # terralchemy writes output files here
 ```
 
-### 2. Define sources
+### Step 2: Add your geospatial data
+
+Drop any geo file into the `data/` folder. For this demo, create a small GeoJSON file:
+
+```bash
+cat > data/florida_cities.geojson << 'EOF'
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {"name": "Jacksonville", "population": 949611, "county": "Duval"},
+      "geometry": {"type": "Point", "coordinates": [-81.6557, 30.3322]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"name": "Miami", "population": 449514, "county": "Miami-Dade"},
+      "geometry": {"type": "Point", "coordinates": [-80.1918, 25.7617]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"name": "Tampa", "population": 384959, "county": "Hillsborough"},
+      "geometry": {"type": "Point", "coordinates": [-82.4572, 27.9506]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"name": "Orlando", "population": 307573, "county": "Orange"},
+      "geometry": {"type": "Point", "coordinates": [-81.3789, 28.5383]}
+    },
+    {
+      "type": "Feature",
+      "properties": {"name": "Tallahassee", "population": 196169, "county": "Leon"},
+      "geometry": {"type": "Point", "coordinates": [-84.2807, 30.4383]}
+    }
+  ]
+}
+EOF
+```
+
+> You can also use your own Shapefiles (.shp), GeoPackage (.gpkg), GeoParquet (.parquet), FlatGeobuf (.fgb), or KML (.kml) — terralchemy reads them all the same way.
+
+### Step 3: Tell terralchemy about your data (sources)
+
+Open `sources/example.yml` and replace its contents with:
 
 ```yaml
-# sources/boundaries.yml
+# sources/florida.yml  (you can rename the file to anything you want)
+
 sources:
-  - name: countries
-    path: data/countries.geojson
+  - name: florida_cities          # A short name you'll reference in SQL
+    path: data/florida_cities.geojson
     format: geojson
-    crs: EPSG:4326
-    description: Country boundaries
+    crs: EPSG:4326                # WGS84 — standard lat/lon coordinates
+    description: Major Florida cities with population data
 ```
 
-### 3. Write models
+**What's happening here:**
+- `name` — this is how you'll refer to this data in your SQL models (like a table alias)
+- `path` — relative path to the file inside your project folder
+- `format` — the file type (terralchemy can usually auto-detect this, but it's good to be explicit)
+- `crs` — the coordinate reference system your data uses. EPSG:4326 (WGS84) is the most common for lat/lon data
 
-Models are SQL files with `{{ source() }}` and `{{ ref() }}` for dependency resolution:
+### Step 4: Write your first model (SQL transform)
+
+Models are just `.sql` files in the `models/` folder. Each one takes some input data, transforms it, and produces an output file.
+
+Delete the example model and create a new one:
+
+```bash
+rm models/example.sql
+```
+
+**Model 1** — Filter to cities with population over 300k:
+
+Create `models/big_cities.sql`:
 
 ```sql
--- models/large_countries.sql
--- description: Countries with population over 50M
+-- description: Florida cities with population over 300,000
 -- output_format: geoparquet
 
 SELECT
     name,
     population,
-    ST_Area(geometry) AS area,
+    county,
     geometry
-FROM {{ source('countries') }}
-WHERE population > 50000000
+FROM {{ source('florida_cities') }}
+WHERE population > 300000
+ORDER BY population DESC
 ```
 
+**What's happening here:**
+- The `-- description:` and `-- output_format:` comments at the top are config. terralchemy reads these to know what format to save the output in.
+- `{{ source('florida_cities') }}` tells terralchemy to pull in the source you defined in Step 3. terralchemy replaces this with the actual table reference at runtime.
+- Everything else is standard SQL. You can use any SQL you already know.
+
+**Model 2** — Create a 0.1-degree buffer zone around each big city:
+
+Create `models/city_buffers.sql`:
+
 ```sql
--- models/country_centroids.sql
--- description: Centroids of large countries
+-- description: Buffer zones around big Florida cities
+-- output_format: geojson
 
 SELECT
     name,
     population,
-    ST_Centroid(geometry) AS geometry
-FROM {{ ref('large_countries') }}
+    ST_Buffer(geometry, 0.1) AS geometry
+FROM {{ ref('big_cities') }}
 ```
 
-### 4. Add tests
+**What's happening here:**
+- `{{ ref('big_cities') }}` references the output of your first model. terralchemy automatically figures out that `city_buffers` depends on `big_cities` and runs them in the right order.
+- `ST_Buffer(geometry, 0.1)` is a spatial function that creates a polygon around each point. The 0.1 is in degrees (roughly 11km at this latitude).
+- This model outputs GeoJSON instead of GeoParquet — you control the format per model.
+
+> **Tip:** You can use any of DuckDB's 100+ spatial functions in your models — `ST_Within`, `ST_Intersects`, `ST_Area`, `ST_Distance`, `ST_Centroid`, `ST_Union`, and many more. Full list: https://duckdb.org/docs/extensions/spatial.html
+
+### Step 5: Add quality checks (tests)
+
+Tests catch problems like invalid geometries, empty results, or coordinates that are out of bounds. You define them in YAML.
+
+Replace `tests/example.yml` with:
 
 ```yaml
-# tests/spatial.yml
+# tests/florida_tests.yml
+
 tests:
-  - name: valid_geometry
-    model: large_countries
+  # Make sure the big_cities model actually returned some rows
+  - name: big_cities_not_empty
+    model: big_cities
+    test: row_count_positive
+
+  # Make sure all geometries are valid (no self-intersections, etc.)
+  - name: big_cities_valid_geometry
+    model: big_cities
     test: geometry_is_valid
 
-  - name: within_bounds
-    model: large_countries
+  # Make sure no coordinates are outside normal lat/lon bounds
+  - name: big_cities_within_bounds
+    model: big_cities
     test: bounds_check
 
-  - name: has_data
-    model: country_centroids
+  # Same checks for the buffer model
+  - name: buffers_not_empty
+    model: city_buffers
     test: row_count_positive
+
+  - name: buffers_valid_geometry
+    model: city_buffers
+    test: geometry_is_valid
 ```
 
-### 5. Run
+**Available built-in tests:**
+
+| Test name | What it checks |
+|---|---|
+| `row_count_positive` | The model produced at least 1 row |
+| `geometry_is_valid` | Every geometry passes OGC validity rules (no self-intersections, etc.) |
+| `geometry_not_empty` | No empty/blank geometries |
+| `geometry_not_null` | No rows where the geometry column is NULL |
+| `no_duplicate_geometries` | No two rows have the exact same geometry |
+| `bounds_check` | All coordinates are within -180 to 180 longitude, -90 to 90 latitude |
+
+You can also write custom SQL tests:
+
+```yaml
+  - name: population_sanity_check
+    model: big_cities
+    test: custom_sql
+    query: "SELECT COUNT(*) FROM {{ model }} WHERE population < 0"
+    expect: zero
+```
+
+### Step 6: See the pipeline DAG
+
+Before running anything, you can preview what terralchemy will do:
 
 ```bash
-# View the pipeline DAG
 terralchemy list
-
-# Run the pipeline
-terralchemy run
-
-# Run spatial tests
-terralchemy test
-
-# Run specific models
-terralchemy run --select large_countries,country_centroids
 ```
+
+Output:
+
+```
+                              Pipeline DAG
+┏━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┓
+┃ Order ┃ Type   ┃ Name            ┃ Dependencies    ┃ Output Format ┃
+┡━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━┩
+│ 1     │ source │ florida_cities  │ -               │               │
+│ 2     │ model  │ big_cities      │ florida_cities  │ geoparquet    │
+│ 3     │ model  │ city_buffers    │ big_cities      │ geojson       │
+└───────┴────────┴─────────────────┴─────────────────┴───────────────┘
+```
+
+This shows the execution order. terralchemy reads `florida_cities` first, then runs `big_cities`, then `city_buffers`.
+
+### Step 7: Run the pipeline
+
+```bash
+terralchemy run
+```
+
+Output:
+
+```
+terralchemy v0.1.0 — running project florida_demo
+
+Execution order: big_cities -> city_buffers
+
+  Loading source: florida_cities (data/florida_cities.geojson)
+  Running model: big_cities
+    -> target/big_cities.parquet (4 rows)
+  Running model: city_buffers
+    -> target/city_buffers.geojson (4 rows)
+
+Pipeline complete. 2 models materialized.
+```
+
+Your output files are now in `target/`:
+- `target/big_cities.parquet` — GeoParquet file with the 4 cities over 300k
+- `target/city_buffers.geojson` — GeoJSON file with buffer polygons (you can open this in QGIS, kepler.gl, or geojson.io to see the result)
+
+### Step 8: Run the tests
+
+```bash
+terralchemy test
+```
+
+Output:
+
+```
+                                  Test Results
+┏━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┓
+┃ Status ┃ Test                    ┃ Model        ┃ Type              ┃ Message       ┃
+┡━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━┩
+│ PASS   │ big_cities_not_empty    │ big_cities   │ row_count_positive│ Row count: 4  │
+│ PASS   │ big_cities_valid_geom   │ big_cities   │ geometry_is_valid │ All rows pass │
+│ PASS   │ big_cities_within_bounds│ big_cities   │ bounds_check      │ All rows pass │
+│ PASS   │ buffers_not_empty       │ city_buffers │ row_count_positive│ Row count: 4  │
+│ PASS   │ buffers_valid_geometry  │ city_buffers │ geometry_is_valid │ All rows pass │
+└────────┴─────────────────────────┴──────────────┴───────────────────┴───────────────┘
+
+All 5 tests passed.
+```
+
+### Step 9: Run only specific models (optional)
+
+If you only want to re-run one model (and its dependencies), use `--select`:
+
+```bash
+terralchemy run --select city_buffers
+```
+
+This will run `big_cities` first (because `city_buffers` depends on it), then `city_buffers` — but skip any other models you might have.
 
 ## Supported Formats
 
@@ -152,18 +334,6 @@ terralchemy run --select large_countries,country_centroids
 | FlatGeobuf (.fgb) | |
 | KML (.kml) | |
 | CSV (.csv) | |
-
-## Built-in Spatial Tests
-
-| Test | Description |
-|---|---|
-| `geometry_is_valid` | All geometries pass `ST_IsValid` |
-| `geometry_not_empty` | No empty geometries |
-| `geometry_not_null` | No NULL geometries |
-| `no_duplicate_geometries` | No exact duplicate geometries |
-| `bounds_check` | All geometries within WGS84 bounds |
-| `row_count_positive` | Model has at least one row |
-| `custom_sql` | Your own SQL assertion |
 
 ## Spatial SQL Functions
 
